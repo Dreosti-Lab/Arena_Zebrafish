@@ -22,6 +22,19 @@ import CV_ARK
 #-----------------------------------------------------------------------------
 # Utilities for loading and ploting "arena zebrafish" data
 
+# 1) Mkdir with error reporting
+
+def tryMkDir(path):
+    
+    import os
+
+    try:
+        os.mkdir(path)
+    except OSError:
+        print ("Creation of the directory %s failed" % path + " because it already exists!")
+    else:
+        print ("Successfully created the directory %s " % path)
+        
 # 2) Read Folder List file 
 def read_folder_list(folderListFile): 
     folderFile = open(folderListFile, "r") #"r" means read the file
