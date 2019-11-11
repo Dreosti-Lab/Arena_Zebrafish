@@ -8,7 +8,7 @@ Adapted from Social Zebrafish workflow by Dreosti-Lab
 """
 
 # Set "Library Path" - Social Zebrafish Repo
-lib_path =r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
+lib_path =r'C:\Users\thoma\OneDrive\Documents\GitHub.old\Arena_Zebrafish\libs'
 import sys
 sys.path.append(lib_path)
 
@@ -16,10 +16,10 @@ sys.path.append(lib_path)
 import glob
 import numpy as np
 import AZ_utilities as AZU
-import AZ_video as AZV
+import AZ_video_testing as AZV
 import BONSAI_ARK
 
-folderListFile = r'D:\Arena\FolderLists\191024.txt'
+folderListFile = r'D:\Arena\FolderLists\191106.txt'
 
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 # include a space at the end of the first line
@@ -31,11 +31,14 @@ folderListFile = r'D:\Arena\FolderLists\191024.txt'
 ROI_path, folderNames = AZU.read_folder_list(folderListFile)
 
 # grab bonsai files in the ROI_path 
-bonsaiFiles = glob.glob(ROI_path + '/*.bonsai')
-bonsaiFiles = bonsaiFiles[0]
-ROIs = BONSAI_ARK.read_bonsai_crop_rois(bonsaiFiles)
-ROIs = ROIs[:, :]
-#ROI is in the form ROI[0]=x-origin
+bonsaiFiles = glob.glob(ROI_path + '/*ROI*.bonsai')
+if(len(bonsaiFiles)!=0):
+    bonsaiFiles = bonsaiFiles[0]
+    ROIs = BONSAI_ARK.read_bonsai_crop_rois(bonsaiFiles)
+    ROIs = ROIs[:, :]
+else:
+    ROIs=[]
+#ROI is in the form ROI[0]=x-origin     N.B. origin (x=0,y=0) in Bonsai is top left
 #                   ROI[1]=y-origin
 #                   ROI[2]=width
 #                   ROI[3]=height
