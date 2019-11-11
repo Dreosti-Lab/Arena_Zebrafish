@@ -12,7 +12,6 @@ import scipy.misc as misc
 import math
 import cv2
 
-
 # Process Video : Track fish in AVI
 def arena_fish_tracking(aviFile, output_folder, ROI):
 
@@ -31,7 +30,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         
     # Compute a "Starting" Background
     # - Median value of 20 frames with significant difference between them
-    background = compute_initial_background(vid, ROI)
+    background = compute_initial_background(aviFile, ROI)
 
     # Algorithm
     # 1. Find initial background guess for the ROI
@@ -43,7 +42,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     # 7. - Compute Heading
 
     
-        
+    vid = cv2.VideoCapture(aviFile)     
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second)
     
     previous_ROI=[]
@@ -61,18 +60,18 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     motS = np.zeros((numFrames,1))          # frame-by-frame change in segmented particle
     
     
-    import timeit
+    
 #    numFrames=10*120
 #    For testing
     for f in range(0,numFrames):
-        tic = timeit.default_timer();
-        
+                
         # Report Progress every 120 frames of movie
-        if (f%120) == 0:
-            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
+#        if (f%120) == 0:
+#            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
+#            
         # Read next frame        
         ret, im = vid.read()
-        
+
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         crop, xOff, yOff = get_ROI_crop(current, ROI,0)
@@ -269,9 +268,6 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
 #                plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
             plt.draw()
             plt.pause(0.001)
-        toc = timeit.default_timer()
-        timePerFrame=np.zeros(numFrames)
-        timePerFrame[f]=(toc-tic)
 # ---------------------------------------------------------------------------------
 # Save Tracking Summary
         if(f == 0):
@@ -309,15 +305,14 @@ def get_ROI_size(ROIs, numROi):
     return width, height
 
 
-def compute_initial_background(vid, ROI):
+def compute_initial_background(aviFile, ROI):
 
     # Load Video
-#    vid = cv2.VideoCapture(aviFile)
+    vid = cv2.VideoCapture(aviFile)
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second)
     # Allocate space for ROI background
     background_ROI = []
-    
-    print(ROI)
+
     w, h = get_ROI_size(ROI, 0)
     background_ROI.append(np.zeros((h, w), dtype = np.float32))
     
@@ -332,66 +327,6 @@ def compute_initial_background(vid, ROI):
     vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
     ret, im = vid.read()
     current = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
-    crop, xOff, yOff = get_ROI_crop(current, ROI,0)
-    backgroundStack[:,:,0] = np.copy(crop)
-    previous = np.copy(crop)
-    bCount = 1
-    
-        # Search for useful background frames every stepFrames (significantly different than previous)
-    changes = []
-    for f in range(stepFrames, numFrames, stepFrames):
-
-        # Read frame
-        vid.set(cv2.CAP_PROP_POS_FRAMES, f)
-        ret, im = vid.read()
-        current = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
-        crop, xOff, yOff = get_ROI_crop(current, ROI, 0)
-    
-    # Measure change from current to previous frame
-    absdiff = np.abs(previous-crop)
-    level = np.median(crop)/7
-    change = np.mean(absdiff > level)
-    changes.append(change)
-    previous = np.copy(crop)
-    
-    # If significant, add to stack...possible finish
-    if(change > 0.000075):
-        backgroundStack[:,:,bCount] = np.copy(crop)
-        bCount = bCount + 1
-        if(bCount == bFrames):
-            print("Background for ROI found on frame " + str(f))
-            
-    
-    # Compute background
-    backgroundStack = backgroundStack[:,:, 0:bCount]
-    background_ROI = np.median(backgroundStack, axis=2)                     
-    # Return initial background
-    return background_ROI
-
-# version for whole image
-    
-def compute_initial_background_noROI(vid,w,h):
-
-    # Load Video
-#    vid = cv2.VideoCapture(aviFile)
-    numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second)
-    # Allocate space for ROI background
-    background_ROI = []
-    background_ROI.append(np.zeros((h, w), dtype = np.float32))
-    
-    # Find initial background for the ROI
-    crop_width=w
-    crop_height =h
-    stepFrames = 1000 # Check background frame every 10 seconds
-    bFrames = 20
-    backgroundStack = np.zeros((crop_height, crop_width, bFrames), dtype = np.float32)  
-    previous = np.zeros((crop_height, crop_width), dtype = np.float32)
-
-    # Store first frame
-    vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    ret, im = vid.read()
-    current = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
-    
     crop, xOff, yOff = get_ROI_crop(current, ROI,0)
     backgroundStack[:,:,0] = np.copy(crop)
     previous = np.copy(crop)

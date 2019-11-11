@@ -16,7 +16,7 @@ sys.path.append(lib_path)
 import glob
 import numpy as np
 import AZ_utilities as AZU
-import AZ_video_testing as AZV
+import AZ_video as AZV
 import BONSAI_ARK
 
 folderListFile = r'D:\Arena\FolderLists\191106.txt'
