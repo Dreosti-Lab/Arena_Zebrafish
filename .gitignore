@@ -1,2 +1,7 @@
 
 libs/AZ_video_w.py
+libs/AZ_video_WORKING.py
+*.pyc
+*.pyc
+libs/__pycache__/CV_ARK.cpython-37.pyc
+*.pyc
