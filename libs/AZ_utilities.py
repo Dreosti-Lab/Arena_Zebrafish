@@ -8,30 +8,85 @@ Adapted from Social Zebrafish library by Dreosti-Lab
 # -----------------------------------------------------------------------------
 
 lib_path = r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
-
+import math
 # Set Library Paths
 import sys
 sys.path.append(lib_path)
 # -----------------------------------------------------------------------------
 
 # Import useful libraries
+import AZ_video as AZV
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import CV_ARK
+import cv2
 #-----------------------------------------------------------------------------
 # Utilities for loading and ploting "arena zebrafish" data
+# compute thresholded binary image between two frames (testing tracking - should find the fish if it moved, or if static and background image used)
+def trackFrame(aviFile,f0,f1,divisor):
+    vid = cv2.VideoCapture(aviFile)
+    im0=grabFrame(vid1,f0)
+    im1=grabFrame(vid,f1)
+    im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2GRAY)
+    im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
+    diff = im0 - im1
+    threshold_level = np.median(im0)/divisor
+    level, threshold = cv2.threshold(diff,threshold_level,255,cv2.THRESH_BINARY)
+    threshold = np.uint8(threshold)
+    #threshold = np.uint8(diff > threshold_level)
+    return threshold
 
+def trackFrameBG(ROI,aviFileB,aviFile,f0,f1,divisor):
+    vid = cv2.VideoCapture(aviFile)
+    im0=AZV.compute_initial_background(aviFile, ROI)
+    im1=grabFrame(vid,f1)
+    im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
+    diff = im0 - im1
+    threshold_level = np.median(im0)/divisor
+    level, threshold = cv2.threshold(diff,threshold_level,255,cv2.THRESH_BINARY)
+    threshold = np.uint8(threshold)
+    #threshold = np.uint8(diff > threshold_level)
+    return threshold
+
+# set frame without having to type the crazy long cv2 command
+def setFrame(vid,frame):
+    vid.set(cv2.CAP_PROP_POS_FRAMES, frame)
+
+
+# grab frame and return the image (float32)
+def grabFrame32(vid,frame):
+    vid.set(cv2.CAP_PROP_POS_FRAMES, frame)
+    ret, im = vid.read()
+    im = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
+    return im
+   # grab frame and return the image
+def grabFrame(vid,frame):
+    vid.set(cv2.CAP_PROP_POS_FRAMES, frame)
+    ret, im = vid.read()
+    return im
+# shows selected frame of a cv2 object/ video (for testing)
+def showFrame(vid,frame):
+
+    vid.set(cv2.CAP_PROP_POS_FRAMES, frame)
+    ret, im = vid.read()
+    im = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
+    plt.figure()
+    plt.imshow(im)
+
+def checkTracking(fx,fy):
+    
+    absDiffX=np.abs(np.diff(fx))
+    absDiffY=np.abs(np.diff(fy))
+    distPerFrame=math.sqrt(np.square(absDiffX)+np.square(absDiffY))
 # 1) Mkdir with error reporting
 
 def tryMkDir(path):
-    
-    import os
 
     try:
         os.mkdir(path)
     except OSError:
-        print ("Creation of the directory %s failed" % path + " because it already exists!")
+        print ("Creation of the directory %s failed" % path + ", it might already exist!")
     else:
         print ("Successfully created the directory %s " % path)
         
@@ -42,7 +97,7 @@ def read_folder_list(folderListFile):
     data_path = folderList[0][:-1] # Read Data Path which is the first line
     folderList = folderList[1:] # Remove first line becasue it contains the path
     
-    folderNames = [] # We use this becasue we do not know the exact lenght
+    folderNames = [] # We use this becasue we do not know the exact length
     
     for i, f in enumerate(folderList):  #enumerate tells you what folder is 'i'
         stringLine = f[:].split()
@@ -424,6 +479,8 @@ def get_folder_names_controls(folder):
     
     return NS_folder, S_folder
     
+def exponential(x, a, k, b):
+    return a*np.exp(x*k) + b
 
      
 # FIN

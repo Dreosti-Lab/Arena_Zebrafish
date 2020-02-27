@@ -8,7 +8,7 @@ Adapted from Social Zebrafish workflow by Dreosti-Lab
 """
 
 # Set "Library Path" - Social Zebrafish Repo
-lib_path =r'C:\Users\thoma\OneDrive\Documents\GitHub.old\Arena_Zebrafish\libs'
+lib_path =r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
 import sys
 sys.path.append(lib_path)
 
@@ -19,7 +19,7 @@ import AZ_utilities as AZU
 import AZ_video as AZV
 import BONSAI_ARK
 
-folderListFile = r'D:\Arena\FolderLists\191106.txt'
+folderListFile = r'D:\Arena\FolderLists\191217_repeat.txt'
 
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 # include a space at the end of the first line
@@ -53,8 +53,8 @@ for idx,folder in enumerate(folderNames):
         d,expName=aviFile.rsplit('\\',1)  # take last part of aviFile path
         expName=expName[0:-4]             # remove the '.avi'
         if(f==0):
-            figureDirPath=d+'\\Figures'
-            trackingDirPath=d+'\\Tracking'
+            figureDirPath=d+r'\Figures'
+            trackingDirPath=d+r'\Tracking'
             AZU.tryMkDir(figureDirPath)
             AZU.tryMkDir(trackingDirPath)
                     
@@ -62,6 +62,6 @@ for idx,folder in enumerate(folderNames):
         fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS = AZV.arena_fish_tracking(aviFile, figureDirPath, ROIs)
         
         # Save tracking for each file in it's own folder
-        filename=trackingDirPath + '\\' + expName + '_tracking.npz'
-        fish = np.vstack((fxS[:], fyS[:], bxS[:], byS[:], exS[:], eyS[:], areaS[:], ortS[:], motS[:]))
+        filename=trackingDirPath + r'\\' + expName + '_tracking.npz'
+        fish = np.vstack((fxS[:,0], fyS[:,0], bxS[:,0], byS[:,0], exS[:,0], eyS[:,0], areaS[:,0], ortS[:,0], motS[:,0]))
         np.savez(filename, tracking=fish.T)
