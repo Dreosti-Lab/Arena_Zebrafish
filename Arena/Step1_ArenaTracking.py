@@ -19,8 +19,8 @@ import AZ_utilities as AZU
 import AZ_video as AZV
 import BONSAI_ARK
 
-folderListFile = r'D:\Arena\FolderLists\191217_repeat.txt'
-
+folderListFile = r'S:\WIBR_Dreosti_Lab\Tom\Data\Movies\FolderLists\200227.txt'
+plot = 0    # set  to 1 if you want to see the tracking as it happens... this slows the code significantly
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 # include a space at the end of the first line
 
@@ -59,7 +59,7 @@ for idx,folder in enumerate(folderNames):
             AZU.tryMkDir(trackingDirPath)
                     
         # run the tracking 
-        fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS = AZV.arena_fish_tracking(aviFile, figureDirPath, ROIs)
+        fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS = AZV.arena_fish_tracking(aviFile, figureDirPath, ROIs, plot)
         
         # Save tracking for each file in it's own folder
         filename=trackingDirPath + r'\\' + expName + '_tracking.npz'

@@ -11,9 +11,10 @@ import matplotlib.pyplot as plt
 import scipy.misc as misc
 import math
 import cv2
+import timeit
 
 # Process Video : Track fish in AVI
-def arena_fish_tracking(aviFile, output_folder, ROI):
+def arena_fish_tracking(aviFile, output_folder, ROI, plot):
 
     d,expName=aviFile.rsplit('\\',1)  # take last part of aviFile path
     expName=expName[0:-4]    
@@ -30,8 +31,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         
     # Compute a "Starting" Background
     # - Median value of 20 frames with significant difference between them
+    
     background = compute_initial_background(vid, ROI)
-
+    # 5 seconds
+    
     # Algorithm
     # 1. Find initial background guess for the ROI
     # 2. Extract Crop regions from the ROI
@@ -40,8 +43,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     # 5. - Compute Weighted Centroid (X,Y) for Eye Region (10% of brightest pixels)
     # 6. - Compute Binary Centroid of Body Region (50% of brightest pixels - eyeRegion)
     # 7. - Compute Heading
-
-    vid = cv2.VideoCapture(aviFile)     
+     
+    vid = cv2.VideoCapture(aviFile)  
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second), and the first 30 seconds
     startFrame = 0
     previous_ROI=[]
@@ -62,38 +65,36 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
 #    For testing
     vid.set(cv2.CAP_PROP_POS_FRAMES, startFrame)    # start at startFrame
     for f in range(startFrame,numFrames):
-                
+        
         # Report Progress every 120 frames of movie
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
-#            
         # Read next frame        
         ret, im = vid.read()
-
+        
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         crop, xOff, yOff = get_ROI_crop(current, ROI,0)
-        diff=background-crop                
-            
+        diffimg= background - crop                
+        diffimg[diffimg>220] = 0  #remove nearly saturated differences (not sure where these come from... water evaporation and vibration from drilling maybe?)
+        # 0.005 s
+        
         # Determine current threshold
         threshold_level = np.median(background)/5           
-   
+        
         # Threshold            
-        level, threshold = cv2.threshold(diff,threshold_level,255,cv2.THRESH_BINARY)
-
-        threshold = np.uint8(diff > threshold_level)
-            
-        # Convert to uint8
-        threshold = np.uint8(threshold)
-            
+        level, threshold = cv2.threshold(diffimg,threshold_level,255,cv2.THRESH_BINARY)
+        threshold = np.uint8(diffimg > threshold_level)
+         
         # Binary Close
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
         closing = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, kernel)
             
         # Find Binary Contours            
         contours, hierarchy = cv2.findContours(closing,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-        
-        if f%120 == 0:
+        # takes virtually no time
+               
+        if f%1200 == 0:
             print(f)
             
         # Create Binary Mask Image
@@ -124,6 +125,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 motion = -1.0
         
         else:
+            
             # Get Largest Contour (fish, ideally)
             largest_cnt, area = get_largest_contour(contours)
             
@@ -151,7 +153,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                     motion = -1.0
                     
             else:
-                # Draw contours into Mask Image (1 for Fish, 0 for Background)
+                # Draw contours into Mask Image (1 for Fish, 0 for Background
                 cv2.drawContours(mask,[largest_cnt],0,1,-1) # -1 draw the contour filled
                 pixelpoints = np.transpose(np.nonzero(mask))
                 
@@ -161,20 +163,22 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
 # ---------------------------------------------------------------------------------
                 # Compute Frame-by-Frame Motion (absolute changes above threshold)
                 # - Normalize by total absdiff from background
+                
                 if (f != 0):
                     #absdiff = cv2.absdiff(background, crop)
-                    absdiff = np.abs(diff)
+                    absdiff = np.abs(diffimg)
                     absdiff[absdiff < threshold_level] = 0
                     totalAbsDiff = np.sum(absdiff)
                     frame_by_frame_absdiff = np.abs(np.float32(previous_ROI) - np.float32(crop)) / 2 # Adjust for increases and decreases across frames
                     frame_by_frame_absdiff[frame_by_frame_absdiff < threshold_level] = 0
                     motion = np.sum(np.abs(frame_by_frame_absdiff))/totalAbsDiff
+                    # 0.01 s
                 else:
                     motion = 0
                     
                     # Save Masked Fish Image from ROI (for subsequent frames motion calculation)
                     previous_ROI = np.copy(crop)
-                    
+                #
                 # ---------------------------------------------------------------------------------
                 # Find Body and Eye Centroids
                 area = np.float(area)
@@ -186,7 +190,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 numEyePixels = np.int(np.ceil(area/10))
                     
                 # Fish Pixel Values (difference from background)
-                fishValues = diff[pixelpoints[:,0], pixelpoints[:,1]]
+                fishValues = diffimg[pixelpoints[:,0], pixelpoints[:,1]]
                 sortedFishValues = np.sort(fishValues)
                 
                 bodyThreshold = sortedFishValues[-numBodyPixels]                    
@@ -195,7 +199,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 # Compute Binary/Weighted Centroids
                 r = pixelpoints[:,0]
                 c = pixelpoints[:,1]
-                all_values = diff[r,c]
+                all_values = diffimg[r,c]
                 all_values = all_values.astype(float)
                 r = r.astype(float)
                 c = c.astype(float)
@@ -230,11 +234,13 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                     heading = math.atan2((bY-eY), (eX-bX)) * (360.0/(2*np.pi))
                 else:
                     heading = -181.00
+                # entire module above takes 0.025 s for first frame, then ~0.05 every other frame... why longer for next frames?  
         
         # ---------------------------------------------------------------------------------
         # Store data in arrays
-        
         # Shift X,Y Values by ROI offset and store in Matrix
+        
+        
         fxS[f,0] = fX + xOff
         fyS[f,0] = fY + yOff
         bxS[f,0] = bX + xOff
@@ -244,7 +250,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         areaS[f,0] = area
         ortS[f,0] = heading
         motS[f,0] = motion
-        
+                
         # -----------------------------------------------------------------
         # Update this ROIs background estimate (everywhere except the (dilated) Fish)
         current_background = np.copy(background)            
@@ -253,25 +259,26 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         updated_background = (np.float32(crop) * 0.01) + (current_background * 0.99)
         updated_background[dilated_fish==1] = current_background[dilated_fish==1]            
         background = np.copy(updated_background)
-        
-            
+        # 0.02s every frame
         # ---------------------------------------------------------------------------------
-        # Plot Fish in Movie with Tracking Overlay
-        if (f % 100 == 0) or (f == numFrames-1):
-            print(f)
-            plt.clf()
-            enhanced = cv2.multiply(current, 1)
-            color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
-            plt.imshow(color)
-            plt.axis('image')
-            plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
-            plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
-            plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
-            if (f % 1000 == 0):
-                plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
-                plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
-            plt.draw()
-            plt.pause(0.001)
+        # Plot Fish in Movie with Tracking Overlay?
+        if(plot==1):
+            if (f == 0) or (f == numFrames-1):
+                print(f)
+                plt.clf()
+                enhanced = cv2.multiply(current, 1)
+                color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+                plt.imshow(color)
+                plt.axis('image')
+                plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
+                plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
+                plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
+                if (f % 1000 == 0):
+                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
+                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
+                    plt.draw()
+                    plt.pause(0.001)
+                    # plotting this takes 0.5s even for a single point - minimize!!
 # ---------------------------------------------------------------------------------
 # Save Tracking Summary
         if(f == 0):
@@ -289,9 +296,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
             plt.imshow(background)
             plt.savefig(output_folder+'\\' + expName +'_final_background.png', dpi=300)
             plt.close('backgrounds')
-
-    
-
+            
 # -------------------------------------------------------------------------
 # Close Video File
     vid.release()
@@ -320,14 +325,14 @@ def compute_initial_background(vid, ROI):
     # Find initial background for the ROI
     crop_width, crop_height = get_ROI_size(ROI, 0)
     bFrames = 100
-    stepFrames = np.floor_divide(numFrames,bFrames) # Check background frame uniformly across time series for [numSteps] frames
+    stepFrames = np.int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
     #stepFrames = 360 # Check background frame every 3 seconds
     
     backgroundStack = np.zeros((crop_height, crop_width, bFrames), dtype = np.float32)  
     previous = np.zeros((crop_height, crop_width), dtype = np.float32)
 
     # Store first frame
-    vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    vid.set(cv2.CAP_PROP_POS_FRAMES, 200) # skip first 200 frames
     ret, im = vid.read()
     current = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
     crop, xOff, yOff = get_ROI_crop(current, ROI,0)
@@ -335,7 +340,7 @@ def compute_initial_background(vid, ROI):
     previous = np.copy(crop)
     bCount = 0
     
-        # Search for useful background frames every stepFrames (significantly different than previous)
+        # Search for useful background frames every stepFrames (can add significantly different than previous functionality)
     changes = []
     for f in range(stepFrames, numFrames, stepFrames):
         # Read frame
@@ -355,15 +360,16 @@ def compute_initial_background(vid, ROI):
         if(change > 0):
             backgroundStack[:,:,bCount] = np.copy(crop)
             bCount = bCount + 1
-            print(bCount)
+            #print(bCount)
             if(bCount == bFrames):
                 print("Background for ROI found on frame " + str(f))
-            
+                break
     
     # Compute background
     print('collapsing')
     backgroundStack = backgroundStack[:,:, 0:bCount]
-    background_ROI = np.median(backgroundStack, axis=2)                     
+    background_ROI = np.uint8(np.median(backgroundStack, axis=2))
+                  
     # Return initial background
     return background_ROI
 
