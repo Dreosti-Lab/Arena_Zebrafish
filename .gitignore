@@ -5,3 +5,4 @@ libs/AZ_video_WORKING.py
 *.pyc
 libs/__pycache__/CV_ARK.cpython-37.pyc
 *.pyc
+*.pyc
