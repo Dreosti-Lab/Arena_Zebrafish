@@ -11,15 +11,42 @@ import matplotlib.pyplot as plt
 import scipy.misc as misc
 import math
 import cv2
-import timeit
 
 # Process Video : Track fish in AVI
-def arena_fish_tracking(aviFile, output_folder, ROI, plot):
-
+def arena_fish_tracking(aviFile, output_folder, ROI):
+    
+    #############################################
+    ##### set flags, 1 for ON 0 for OFF #########
+    plot=1
+    crop=1
+    FPS=120
+    saveCroppedMovie=1
+    #############################################
+    ############# Other settings ################
+    #############################################
+    cropSize=[128,128] # size in pixels of area to crop around fish after initially finding it
+    startFrame=0   # use this to skip frames at start of a movie (light, pipette, water ripple, bubbles, iniitial escape swim etc)
+    
+    
+        
+    if plot==1:
+        pmsg='ON'
+    else:
+        pmsg='OFF'
+    if crop==1:
+        cmsg='ON'
+    else:
+        cmsg='OFF. WARNING!! Tracking can take a very long time with cropping turned OFF'
+        
+    message='Tracking fish with plotting turned ' + pmsg + ' and cropping turned ' + cmsg
+    print(message)
+    
     d,expName=aviFile.rsplit('\\',1)  # take last part of aviFile path
     expName=expName[0:-4]    
+    
     # Load Video
     vid = cv2.VideoCapture(aviFile)
+    
     # find size of ROI, or whole image if no ROIs
     if(len(ROI)==0):
         w = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -30,26 +57,28 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
         w, h = get_ROI_size(ROI, 0)
         
     # Compute a "Starting" Background
-    # - Median value of 20 frames with significant difference between them
+    # - Median value of 100 frames sampled evenly across first 30 secs
     
     background = compute_initial_background(vid, ROI)
     # 5 seconds
     
     # Algorithm
-    # 1. Find initial background guess for the ROI
-    # 2. Extract Crop regions from the ROI
-    # 3. Threshold ROI using median/7 of each crop region, Binary Close image using 5 rad disc
+    # 1. Find initial background guess for the whole image
+    # 2. Find difference of startFrame and initial background
+    # 3. Threshold image using median/7 of each crop region, Binary Close image using 5 rad disc
     # 4. Find largest particle (Contour)
     # 5. - Compute Weighted Centroid (X,Y) for Eye Region (10% of brightest pixels)
     # 6. - Compute Binary Centroid of Body Region (50% of brightest pixels - eyeRegion)
     # 7. - Compute Heading
+    # 8. Dilate fish and update background (whole image)
+    # 9. Find crop region based on fx,fy coordinates and provided cropSize
+    # 10. Crop previous_ROI, current, and background on following loops (steps 3 through 7)
+    # 11. Save cropped movie
      
-    vid = cv2.VideoCapture(aviFile)  
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second), and the first 30 seconds
-    startFrame = 0
     previous_ROI=[]
     previous_ROI.append(np.zeros((h,w),dtype = np.uint8))
-    
+    numFrames=60*120
     # Allocate Tracking Data Space
     fxS = np.zeros((numFrames,1))           # Fish X
     fyS = np.zeros((numFrames,1))           # Fish Y
@@ -60,25 +89,31 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
     areaS = np.zeros((numFrames,1))         # area (-1 if error)
     ortS = np.zeros((numFrames,1))          # heading/orientation (angle from body to eyes)
     motS = np.zeros((numFrames,1))          # frame-by-frame change in segmented particle
-       
+      
+    if(saveCroppedMovie==1):
+        croppedMovie=[]
 #    numFrames=10*120
 #    For testing
+    cropFlag = 0
     vid.set(cv2.CAP_PROP_POS_FRAMES, startFrame)    # start at startFrame
+    
     for f in range(startFrame,numFrames):
-        
+#        print(f)
         # Report Progress every 120 frames of movie
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
+        
         # Read next frame        
         ret, im = vid.read()
         
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         crop, xOff, yOff = get_ROI_crop(current, ROI,0)
+                      
         diffimg= background - crop                
         diffimg[diffimg>220] = 0  #remove nearly saturated differences (not sure where these come from... water evaporation and vibration from drilling maybe?)
-        # 0.005 s
-        
+            # 0.005 s
+            
         # Determine current threshold
         threshold_level = np.median(background)/5           
         
@@ -164,7 +199,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
                 # Compute Frame-by-Frame Motion (absolute changes above threshold)
                 # - Normalize by total absdiff from background
                 
-                if (f != 0):
+                if (f!= 0):
                     #absdiff = cv2.absdiff(background, crop)
                     absdiff = np.abs(diffimg)
                     absdiff[absdiff < threshold_level] = 0
@@ -175,9 +210,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
                     # 0.01 s
                 else:
                     motion = 0
-                    
-                    # Save Masked Fish Image from ROI (for subsequent frames motion calculation)
-                    previous_ROI = np.copy(crop)
+                 
+                # Save Masked Fish Image from ROI (for subsequent frames motion calculation)
+                # store cropped frames for saving later
+                
                 #
                 # ---------------------------------------------------------------------------------
                 # Find Body and Eye Centroids
@@ -235,7 +271,48 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
                 else:
                     heading = -181.00
                 # entire module above takes 0.025 s for first frame, then ~0.05 every other frame... why longer for next frames?  
-        
+                # Now crop the movie around the fish
+                # crop movie here and recompute diffimg if working with the first frame
+                # find start and end positions for cropping around the located fish
+                
+                startIdX = math.ceil(fX+xOff) - math.ceil(cropSize[0] / 2)
+                endIdX = math.ceil(fX+xOff) + math.ceil(cropSize[0] / 2)
+                startIdY = math.ceil(fY+yOff) - math.ceil(cropSize[1] / 2)
+                endIdY = math.ceil(fY+yOff) + math.ceil(cropSize[1] / 2)
+                
+                # Check we don't fall off the edge of the image
+                # if it does set start and end to min max of image
+                wFull = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+                hFull = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                
+                if(startIdY<0):
+                    endIdY=endIdY+(startIdY*-1)                
+                    startIdY=0
+                if(startIdX<0):
+                    endIdX=endIdX+(startIdX*-1)
+                    startIdX=0
+                if(endIdX>wFull):
+                    startIdX=startIdX-(wFull-endIdX)
+                    endIdX=wFull
+                if(endIdY>hFull):
+                    startIdY=startIdY-(hFull-endIdY)
+                    endIdY=hFull
+                # crop image, background and mask
+                if(cropFlag==0):
+                    crop=current[startIdY:endIdY,startIdX:endIdX]
+                    backgroundFull=np.copy(background)
+                    maskFull=np.copy(mask)
+                    cropFlag = 1
+                       
+                background=backgroundFull[startIdY:endIdY,startIdX:endIdX]
+                mask=maskFull[startIdY:endIdY,startIdX:endIdX]
+                ROI=np.asarray([[startIdX,startIdY,cropSize[0],cropSize[1]]])
+                crop=current[startIdY:endIdY,startIdX:endIdX]
+                    
+        previous_ROI = np.copy(crop)
+        if(saveCroppedMovie==1):
+            croppedMovie.append(crop)
+            
         # ---------------------------------------------------------------------------------
         # Store data in arrays
         # Shift X,Y Values by ROI offset and store in Matrix
@@ -263,7 +340,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
         # ---------------------------------------------------------------------------------
         # Plot Fish in Movie with Tracking Overlay?
         if(plot==1):
-            if (f == 0) or (f == numFrames-1):
+            if (f%120==0):
                 print(f)
                 plt.clf()
                 enhanced = cv2.multiply(current, 1)
@@ -279,13 +356,30 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
                     plt.draw()
                     plt.pause(0.001)
                     # plotting this takes 0.5s even for a single point - minimize!!
+        else:  
+            if (f == 0) or (f == numFrames-1): # only plot this in the first and last frame to save the file
+                
+                plt.clf()
+                enhanced = cv2.multiply(current, 1)
+                color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+                plt.imshow(color)
+                plt.axis('image')
+                plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
+                plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
+                plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
+                if (f % 1000 == 0):
+                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
+                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
+                    plt.draw()
+                    plt.pause(0.001)
+                    
 # ---------------------------------------------------------------------------------
 # Save Tracking Summary
         if(f == 0):
 #            print('Making tracking image')
             plt.savefig(output_folder + '\\' + expName + '_initial_tracking.png', dpi=300)
             plt.figure('backgrounds')
-            plt.imshow(background)
+            plt.imshow(backgroundFull)
             plt.savefig(output_folder+'\\' + expName +'_initial_background.png', dpi=300)
             plt.close('backgrounds')
        
@@ -293,16 +387,32 @@ def arena_fish_tracking(aviFile, output_folder, ROI, plot):
 #            print('Adding to tracking image')
             plt.savefig(output_folder+'\\' + expName +'_final_tracking.png', dpi=300)
             plt.figure('backgrounds')
-            plt.imshow(background)
+            plt.imshow(backgroundFull)
             plt.savefig(output_folder+'\\' + expName +'_final_background.png', dpi=300)
             plt.close('backgrounds')
             
 # -------------------------------------------------------------------------
 # Close Video File
     vid.release()
-
-# Return tracking data
+    
+    # Save cropped movie?
+    if(saveCroppedMovie==1):
+        saveName=output_folder+'\\' + expName +'_cropped.avi'
+        saveGrayImgListAsMovie(croppedMovie,saveName,FPS,cropSize)
+        
+    # Return tracking data
     return fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS
+
+
+def saveGrayImgListAsMovie(list,saveName,FPS,size):
+                           
+        width=size[0]
+        height=size[1]
+        out = cv2.VideoWriter(saveName+'.avi',cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
+        for i in range(len(list)):
+            out.write(list[i])
+        out.release()
+
 #------------------------------------------------------------------------------
     
 
@@ -325,8 +435,8 @@ def compute_initial_background(vid, ROI):
     # Find initial background for the ROI
     crop_width, crop_height = get_ROI_size(ROI, 0)
     bFrames = 100
-    stepFrames = np.int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
-    #stepFrames = 360 # Check background frame every 3 seconds
+    #stepFrames = np.int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
+    stepFrames = 360 # Check background frame every 3 seconds
     
     backgroundStack = np.zeros((crop_height, crop_width, bFrames), dtype = np.float32)  
     previous = np.zeros((crop_height, crop_width), dtype = np.float32)

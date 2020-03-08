@@ -24,9 +24,44 @@ import cv2
 #-----------------------------------------------------------------------------
 # Utilities for loading and ploting "arena zebrafish" data
 # compute thresholded binary image between two frames (testing tracking - should find the fish if it moved, or if static and background image used)
+
+def plotMotionMetrics(trackingFile,startFrame,endFrame):
+    
+    fx,fy,bx,by,ex,ey,area,ort,motion=load_trackingFile(trackingFile)
+    plt.figure()
+    plt.plot(fx[startFrame:endFrame],fy[startFrame:endFrame])
+    plt.title('Tracking')
+    
+    smoothedMotion=smoothSignal(motion[startFrame:endFrame],120)
+    plt.figure()
+    plt.plot(smoothedMotion)
+    plt.title('Smoothed Motion')
+    
+    distPerFrame,cumDistPerFrame=computeDistPerFrame(fx[startFrame:endFrame],fy[startFrame:endFrame])
+    plt.figure()
+    plt.plot(distPerFrame)
+    plt.title('Distance per Frame')
+    
+    xx=smoothSignal(distPerFrame,30)
+    plt.figure()
+    plt.plot(xx[startFrame:endFrame])
+    plt.title('Smoothed Distance per Frame (30 seconds)')
+    
+    
+    plt.figure()
+    plt.plot(cumDistPerFrame)
+    plt.title('Cumulative distance')    
+    
+    return cumDistPerFrame
+    
+def smoothSignal(x,N):
+
+    xx=np.convolve(x, np.ones((int(N),))/int(N), mode='valid')
+    return xx
+
 def trackFrame(aviFile,f0,f1,divisor):
     vid = cv2.VideoCapture(aviFile)
-    im0=grabFrame(vid1,f0)
+    im0=grabFrame(vid,f0)
     im1=grabFrame(vid,f1)
     im0 = cv2.cvtColor(im0, cv2.COLOR_BGR2GRAY)
     im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
@@ -74,11 +109,28 @@ def showFrame(vid,frame):
     plt.figure()
     plt.imshow(im)
 
-def checkTracking(fx,fy):
+def checkTracking(distPerFrame):
+     
+    thresh=np.mean(distPerFrame)+(np.std(distPerFrame)*5)
+    errorID=distPerFrame>thresh
+    numErrorFrames=np.sum(errorID)
+    percentError=((numErrorFrames/len(fx))*100)
+    message=str(numErrorFrames) + r' frames had unfeasible jumps in distance. This is ' + str(percentError) + r' % of the movie.'
+    print(message)
     
+def computeDistPerFrame(fx,fy):
+    
+    cumDistPerFrame=np.zeros(len(fx)-1)
+    distPerFrame=np.zeros(len(fx))
     absDiffX=np.abs(np.diff(fx))
     absDiffY=np.abs(np.diff(fy))
-    distPerFrame=math.sqrt(np.square(absDiffX)+np.square(absDiffY))
+    for i in range(len(fx)-1):
+        if i!=0:
+            distPerFrame[i]=math.sqrt(np.square(absDiffX[i])+np.square(absDiffY[i]))
+            if distPerFrame[i]>100:distPerFrame[i]=0
+            cumDistPerFrame[i]=distPerFrame[i]+cumDistPerFrame[i-1]
+    return distPerFrame,cumDistPerFrame
+    
 # 1) Mkdir with error reporting
 
 def tryMkDir(path):
@@ -140,6 +192,22 @@ def read_crop_ROIs(roiFilename):
     stim_ROIs[5,:] = np.array(ROIs[10])
     
     return test_ROIs, stim_ROIs
+
+def load_trackingFile(filename):
+    data = np.load(filename)
+    tracking = data['tracking']
+        
+    fx = tracking[:,0] 
+    fy = tracking[:,1]
+    bx = tracking[:,2]
+    by = tracking[:,3]
+    ex = tracking[:,4]
+    ey = tracking[:,5]
+    area = tracking[:,6]
+    ort = tracking[:,7]
+    motion = tracking[:,8]
+    
+    return fx,fy,bx,by,ex,ey,area,ort,motion
 
 # Load Tracking Data
 def load_tracking(filename):
