@@ -201,6 +201,17 @@ def computeVISIBLE(xPositions, yPositions, testROI, stimROI):
     
     return AllVisibleFrames_Y_TF
 
+def findBoutAmp(allBouts):
+    
+    ampBouts=np.zeros(len(allBouts))
+    for i in range(len(allBouts)):
+        ampBouts[i]=(max(allBouts[i,:]))
+        
+    hist=np.histogram(ampBouts,)
+        
+        
+    return ampBouts
+
 # Measure distance traveled during experiment (in mm)
 def distance_traveled(bx, by, ROI):
 

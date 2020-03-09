@@ -56,13 +56,13 @@ def measure_BPS(motion, startThreshold, stopThreshold):
     
     # Measure average bout trajectory
     boutStarts = boutStarts[(boutStarts > 25) * (boutStarts < (len(motion)-75))]
-    allBouts = np.zeros([len(boutStarts), 100])
+    allBouts = np.zeros([len(boutStarts), 120])
     for b in range(0,len(boutStarts)):
-        allBouts[b,:] = motion[(boutStarts[b]-25):(boutStarts[b]+75)];
+        allBouts[b,:] = motion[(boutStarts[b]-25):(boutStarts[b]+95)];
     avgBout = np.mean(allBouts,0);
 
-    return boutsPerSecond, avgBout
-
+    return boutsPerSecond, avgBout, allBouts
+ 
 # Build a histogram of all orientation values
 def ort_histogram(ort):
 
