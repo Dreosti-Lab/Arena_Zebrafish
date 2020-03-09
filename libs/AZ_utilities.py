@@ -25,6 +25,19 @@ import cv2
 # Utilities for loading and ploting "arena zebrafish" data
 # compute thresholded binary image between two frames (testing tracking - should find the fish if it moved, or if static and background image used)
 
+def trimMovie(aviFile,startFrame,endFrame,saveName):
+    FPS=120
+    vid=cv2.VideoCapture(aviFile)
+    width=int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height=int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out = cv2.VideoWriter(saveName+'.avi',cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
+    setFrame(vid,startFrame)
+    for i in range(endFrame-startFrame):
+        ret, im = vid.read()
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        out.write(im)
+    out.release()
+
 def plotMotionMetrics(trackingFile,startFrame,endFrame):
     
     fx,fy,bx,by,ex,ey,area,ort,motion=load_trackingFile(trackingFile)

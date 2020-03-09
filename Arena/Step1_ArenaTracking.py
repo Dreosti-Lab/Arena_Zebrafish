@@ -16,12 +16,12 @@ sys.path.append(lib_path)
 import glob
 import numpy as np
 import AZ_utilities as AZU
-import AZ_video_editing as AZV
+import AZ_video as AZV
 import BONSAI_ARK
 import timeit
 
 
-folderListFile =r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\Arena\testList.txt'
+folderListFile =r'S:\WIBR_Dreosti_Lab\Tom\Data\Movies\FolderLists\test.txt'
 plot = 1    # set  to 1 if you want to see the tracking as it happens... this slows the code significantly
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 # include a space at the end of the first line
@@ -55,8 +55,8 @@ for idx,folder in enumerate(folderNames):
         d,expName=aviFile.rsplit('\\',1)  # take last part of aviFile path
         expName=expName[0:-4]             # remove the '.avi'
         if(f==0):
-            figureDirPath=d+r'\FiguresTest'
-            trackingDirPath=d+r'\TrackingTest'
+            figureDirPath=d+r'\FiguresCrop'
+            trackingDirPath=d+r'\TrackingCrop'
             AZU.tryMkDir(figureDirPath)
             AZU.tryMkDir(trackingDirPath)
                     
