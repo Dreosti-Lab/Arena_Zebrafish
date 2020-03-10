@@ -17,6 +17,7 @@ import AZ_utilities as AZU
 def arena_fish_tracking(aviFile, output_folder, ROI):
     #############################################
     ##### set flags, 1 for ON 0 for OFF #########
+    l=0
     plot=1
     cropOp=1
     FPS=120
@@ -104,7 +105,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     print('Tracking')
     
     for f in range(numFrames):
-#        print(f)
+        print(f+startFrame)
         # Report Progress every 120 frames of movie
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
@@ -272,6 +273,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 # Now crop the movie around the fish
                 # crop movie here and recompute diffimg if working with the first frame
                 # find start and end positions for cropping around the located fish
+                if(f==69720):
+                    print('here')
                 crop,startIdX,startIdY,endIdX,endIdY=cropImFromTracking(vid,current,fX + xOff,fY + yOff,cropSize)
                 ROI=np.asarray([[startIdX,startIdY,cropSize[0],cropSize[1]]])
                 # If this is the first time, then we have found the fish on the whole image. Will work with cropped images from now on
@@ -300,9 +303,9 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 
         # -----------------------------------------------------------------
         # Update the whole background estimate (everywhere except the (dilated) Fish)
-        # Every 5 mins, recompute complete background
+        # Every 2 mins, recompute complete background
         
-        if((f%(FPS*(5*60))==0)&f!=0):
+        if((f%(FPS*(2*60))==0)&f!=0):
             backgroundFull=recomputeBackground(vid,f,OrigROI)
             vid.set(cv2.CAP_PROP_POS_FRAMES,f) # reset frame number
             background, xOff, yOff = get_ROI_crop(backgroundFull, ROI,0)
@@ -317,7 +320,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         # ---------------------------------------------------------------------------------
         # Plot Fish in Movie with Tracking Overlay?
         if(plot==1):
-            if (f%600==0): # every 5 seconds
+            if(f==0) or (f == numFrames-1):
+#            if (f%30==0): # every 5 seconds
 #                print(f)
                 plt.clf()
                 enhanced = cv2.multiply(current, 1)
@@ -327,12 +331,21 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
                 plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
                 plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
+#                if(l<10):
+#                    ll='00'+str(l)
+#                else:
+#                    if(l<100):
+#                        ll='0'+str(l)
+#                    else:
+#                        ll=str(l)
+#                        
+#                plt.savefig(output_folder + '\\' + ll + '.png', dpi=300)
+#                l+=1
 #                if (f % 7200 == 0): # every minute
 #                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
 #                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
 #                    plt.draw()
 #                    plt.pause(0.001)
-                    # plotting this takes 0.5s even for a single point - minimize!!
         else:  
             if (f == 0) or (f == numFrames-1): # only plot this in the first and last frame to save the file
                 
@@ -344,12 +357,12 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
                 plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
                 plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
-                if (f % 1000 == 0):
-                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
-                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
-                    plt.draw()
-                    plt.pause(0.001)
-                    
+#                if (f % 1000 == 0):
+#                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
+#                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
+#                    plt.draw()
+#                    plt.pause(0.001)
+#                    
 # ---------------------------------------------------------------------------------
 # Save Tracking Summary
         if(f == 0):
@@ -361,7 +374,6 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
             plt.close('backgrounds')
        
         if(f == numFrames-1):
-#            print('Adding to tracking image')
             plt.savefig(output_folder+'\\' + expName +'_final_tracking.png', dpi=300)
             plt.figure('backgrounds')
             plt.imshow(backgroundFull)

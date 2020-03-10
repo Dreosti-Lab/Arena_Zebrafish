@@ -21,7 +21,7 @@ import BONSAI_ARK
 import timeit
 
 
-folderListFile =r'S:\WIBR_Dreosti_Lab\Tom\Data\Movies\FolderLists\test.txt'
+folderListFile =r'S:\WIBR_Dreosti_Lab\Tom\Data\Movies\FolderLists\200308_AllExpReverseOrder.txt'
 plot = 1    # set  to 1 if you want to see the tracking as it happens... this slows the code significantly
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 # include a space at the end of the first line
