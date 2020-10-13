@@ -20,16 +20,491 @@ sys.path.append(lib_path)
 # -----------------------------------------------------------------------------
 
 # Import useful libraries
-import os
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import scipy.signal as signal
-import CV_ARK # it is like you have all the functions here in this file
 import AZ_utilities as AZU
+import scipy.ndimage as ndimage
+from scipy.optimize import curve_fit
+import AZ_math as AZM
+import cv2 as cv2
 
-# Functions for analyzing "social zebrafish" data
+## Dispersal analysis: take trajectory in 5 second windows and find the smallest circle that encompasses that trajectory. 
+## Needs only fx, fy and framerate
 
+def measureDispersal(xPos,yPos,frameRate=120,window=5):
+    print('Measuring dispersal...')
+    winFr=np.int(np.floor(window*frameRate))
+    numFr=len(xPos)
+    dispVec=np.zeros(numFr)
+    
+    for i in range(numFr): # cycle through all time points
+#        print(i)
+        if i>winFr: # skip first window
+            if i==np.floor_divide(numFr,2): print('Halfway through dispersal measurement...')
+            xPosj=[]
+            yPosj=[]
+            for j in range(i-winFr,i): # cycle through positions window secs behind
+                # build this trajectory
+                xPosj.append(xPos[j])
+                yPosj.append(yPos[j])
+            
+            # find time points of most distant points in x and y
+            x1_t=np.where(xPosj==np.min(xPosj))[0][0]
+            x2_t=np.where(xPosj==np.max(xPosj))[0][0]
+            y1_t=np.where(yPosj==np.min(yPosj))[0][0]
+            y2_t=np.where(yPosj==np.max(yPosj))[0][0]
+            
+            # find their coordinates
+            x1=([xPosj[x1_t],yPosj[x1_t]])
+            x2=([xPosj[x2_t],yPosj[x2_t]])
+            y1=([xPosj[y1_t],yPosj[y1_t]])
+            y2=([xPosj[y2_t],yPosj[y2_t]])
+            
+            # find distance between each of these points and find largest
+            xy=[]
+            xy.append(AZU.computeDist(x1[0],x1[1],x2[0],x2[1]))
+            xy.append(AZU.computeDist(x1[0],x1[1],y1[0],y1[1]))
+            xy.append(AZU.computeDist(x1[0],x1[1],y2[0],y2[1]))
+            xy.append(AZU.computeDist(x2[0],x2[1],y1[0],y1[1]))
+            xy.append(AZU.computeDist(x2[0],x2[1],y2[0],y2[1]))
+            xy.append(AZU.computeDist(y1[0],y1[1],y2[0],y2[1]))
+            dispVec[i] = np.max(xy)/2 # take half the largest distance as radius for this time frame
+    
+    # pad the start of vector (first window seconds) with the first dispersal value 
+    for i in range(winFr):
+        dispVec[0:winFr]=dispVec[winFr+1]
+        
+    print('Finished measuring dispersal')
+    return dispVec
+#    # (OPTIONAL) Pick a part of the trajectory to display and draw a circle for presentations
+#    if(plotCirc):
+#        
+#        CircMed_t=np.where(dispVec==np.median(dispVec))[0][0]
+#        CircMax_t=np.where(dispVec==np.max(dispVec))[0][0]
+#        
+#        medRad=dispVec[CircMed_t]
+#        maxRad=dispVec[CircMax_t]
+#        
+#        medx=xPos[CircMed_t]
+#        medy=yPos[CircMed_t]
+#        
+#        maxx=xPos[CircMax_t]
+#        maxy=yPos[CircMax_t]
+#        
+#        # grab trajectories
+#        medxPosj=[]
+#        medyPosj=[]
+#        maxxPosj=[]
+#        maxyPosj=[]
+#        for j in range(CircMed_t-winFr,CircMed_t): # cycle through positions window secs behind
+#            # build this trajectory
+#            medxPosj.append(xPos[j])
+#            medyPosj.append(yPos[j])
+#        
+#        for j in range(CircMax_t-winFr,CircMax_t): # cycle through positions window secs behind
+#            # build this trajectory
+#            maxxPosj.append(xPos[j])
+#            maxyPosj.append(yPos[j])
+#            
+#        figName='MedTrajCirc'
+#        plt.figure(figName)
+#        plt.title(figName)
+#        plt.plot(medxPosj,medyPosj)
+#        H=(np.median(dispVec)*2)+5 # mm
+#        lim=(np.sqrt(np.square(H)/2))
+##        xst=np.min(medxPosj)-2.5
+##        yst=np.min(medyPosj)-2.5
+##        plt.xlim(xst,xst+lim)
+##        plt.ylim(yst,yst+lim)
+#        ax = plt.gca()
+#        ylims=ax.get_ylim()
+#        xlims=ax.get_xlim()
+#        Xcen=np.mean(xlims)
+#        Ycen=np.mean(ylims)
+#        plt.xlim((Xcen-(lim/2)),Xcen+(lim/2))
+#        plt.ylim((Ycen-(lim/2)),Ycen+(lim/2))
+#        circlemed=plt.Circle((np.mean(xlims),np.mean(ylims)),medRad,color='blue',fill=False)
+#        ax.add_artist(circlemed)
+#        
+#        figName='MaxTrajCirc'
+#        plt.figure(figName)
+#        plt.title(figName)
+#        plt.plot(maxxPosj,maxyPosj)
+#        H=(np.max(dispVec)*2)+5 # mm
+#        lim=(np.sqrt(np.square(H)/2))
+#        ax = plt.gca()
+#        ylims=ax.get_ylim()
+#        xlims=ax.get_xlim()
+#        Xcen=np.mean(xlims)
+#        Ycen=np.mean(ylims)
+#        plt.xlim((Xcen-(lim/2)),Xcen+(lim/2))
+#        plt.ylim((Ycen-(lim/2)),Ycen+(lim/2))
+#        circlemax=plt.Circle((np.mean(xlims),np.mean(ylims)),maxRad,color='blue',fill=False)
+#        ax.add_artist(circlemax)
+    
+   
+
+def findBoutsXY(fx,fy,boutStarts):
+    
+    boutX = np.zeros(len(boutStarts))
+    boutY = np.zeros(len(boutStarts))
+    
+    # cycle through boutStarts
+    for i,s in enumerate(boutStarts):
+        boutX[i]=fx[s]
+        boutY[i]=fy[s]
+#    print('Done')
+    return boutX,boutY
+
+def computeTimeCentreSurround(fx,fy,imageWidth=1280,imageHeight=1280,gridSize=40): # position of centre is hardcoded = only works for 20,20 heatmaps (default)
+    
+    ## this is the hard coded bit that means it only works with 40 x 40 gridSize at present
+    startXH= 8
+    startYH= 8
+    endXH= 31
+    endYH = 31
+    
+    locs=[]
+    locs.append('Centre')
+    locs.append('Surround')
+    
+    # create matrixs of zeros the same size as gridSize in hieght and width: boutCount, featureSum 
+    startX= np.zeros(gridSize)
+    startY= np.zeros(gridSize)
+    endX= np.zeros(gridSize)
+    endY = np.zeros(gridSize)
+    
+    for i in range(len(startX)): # cycle through i = startX
+        div = imageWidth / gridSize # divide imageWidth by gridSize, 
+        startX[i] = div * i 
+        endX[i] = div * (i+1) 
+        
+        div = imageHeight / gridSize
+        startY[i] = div * i
+        endY[i] = div * (i+1) 
+        
+    pntCountCentre=0
+    pntCountSurround=0
+    for j in range(len(fx)): # cycle through all frames
+        
+        gridX = -1
+        gridY = -1
+        
+        ## Is x position in centre?
+        for k in range(len(locs)): # cycle through gridXLocations
+            if fx[j] >startX[startXH] and fx[j]<endX[endXH]: # then we are in the central range of x
+                gridX=k
+                # Is y position in centre?
+                for l in range(len(locs)): # cycle though gridYLocations
+                    if fy[j] >startY[startYH] and fy[j] <endY[endYH]: # then we are in the central range of y
+                        gridY=l
+                        break
+                
+        if gridX>=0 and gridY>=0: # check we found this frame
+            pntCountCentre += 1 # update count grid with location of this bout
+        else: 
+            pntCountSurround += 1
+            
+    pntCentreNorm=pntCountCentre/len(fx)
+    pntSurroundNorm=pntCountSurround/len(fx)
+    
+    return pntCentreNorm,pntSurroundNorm
+            
+def heatmapFeature(fx,fy,boutStarts,feature,imageWidth=[],imageHeight=[],gridSize=20):
+    
+    # create matrixs of zeros the same size as gridSize in hieght and width: boutCount, featureSum 
+    boutCount = np.zeros([gridSize,gridSize])
+    featureSum = np.zeros([gridSize,gridSize])
+    
+    startX= np.zeros(gridSize)
+    startY= np.zeros(gridSize)
+    endX= np.zeros(gridSize)
+    endY = np.zeros(gridSize)
+    lostBoutsCount=0
+    
+    for i in range(len(startX)): # cycle through i = startX
+        div = imageWidth / gridSize # divide imageWidth by gridSize, 
+        startX[i] = div * i 
+        endX[i] = div * (i+1) 
+        
+        div = imageHeight / gridSize
+        startY[i] = div * i
+        endY[i] = div * (i+1) 
+    
+    xBout,yBout = findBoutsXY(fx,fy,boutStarts)
+    
+    for j in range(len(xBout)): # cycle through bouts
+        
+        gridX = -1
+        gridY = -1
+        ## Find X position in grid for this bout
+        for k in range(gridSize): # cycle through gridXLocations
+            if xBout[j] >startX[k] and xBout[j]<endX[k]: # then we are in the right x
+                gridX=k
+                # Find y position
+                for l in range(gridSize): # cycle though gridYLocations
+                    if yBout[j] >startY[l] and yBout[j] <endY[l]: # then we are in the right y
+                        gridY=l
+                        break
+                
+        if gridX>=0 and gridY>=0: # check we found this bout
+            boutCount[gridX,gridY] += 1 # update boutCount grid with location of this bout
+            featureSum[gridX,gridY]=featureSum[gridX,gridY]+feature[j]
+        else: 
+            lostBoutsCount+=1
+            
+    ##  grids to PDF and means
+    np.seterr(divide='ignore',invalid='ignore')
+    boutDensity=np.divide(boutCount,np.sum(boutCount))
+    featureDensity=np.divide(featureSum,np.sum(featureSum))
+    featureAverage=np.divide(featureSum,boutCount)
+    featureDensity[np.isnan(featureDensity)]=0
+    featureAverage[np.isnan(featureAverage)]=0
+    print('Lost ' + str(lostBoutsCount) + ' frames.')
+    return boutCount,boutDensity,featureSum,featureDensity,featureAverage
+    
+def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, preWindow=100, postWindow=300,save=True):
+    ret=1 # assume it works
+    
+    ## Compute activity level of the fish in bouts per second (BPS)
+    preWindow=int(np.floor((preWindow/1000)*FPS))
+    postWindow=int(np.floor((postWindow/1000)*FPS))
+    _,motion_signal=AZU.motion_signal(fx,fy,ort)
+    # Find bouts starts and stops
+    boutStarts = []
+    boutStops = []
+    moving = 0
+    dM=np.zeros(len(motion_signal))
+    dM[1:]=ndimage.filters.gaussian_filter1d(np.diff(motion_signal),2)
+
+    # thresholds should be computed for each movie. Plot out a histogram of the deltas in motion_signal. We assume the noise is Gaussian, so fit a Gaussian to the data. 5* the Sigma of this Gaussian should be a good threshold.
+#    sortDM=sorted(np.abs(dM))
+#    sampleDM=sortDM[0:int(np.floor(len(sortDM)*0.8))] # remove extreme 10% of values (i.e. ignore the ridiculously high motion signals as we want to estimate the noise)
+    histDM,c=np.histogram(dM, bins=500) # plot it out in a histogram
+    cc = (c[:-1]+c[1:])/2
+    mp=np.max(histDM)
+    sd=np.std(dM)
+    initial_guess = [mp,0,sd]
+    popt, pcov = curve_fit(AZM.gaussian_func, cc, histDM,p0=initial_guess)
+    if plot:
+        plt.scatter(cc,histDM)
+        plt.plot(cc,AZM.gaussian_func(cc,*popt))
+        plt.show() 
+    
+    # in order to be counted as a bout, the rate of increase must be at least 5 sigmas from the gaussian: appears robust when used on a slightly smoothed trace     
+    # in order for the bout to end, it must fall to below 1 sigma for 5 consecutive frames and be at least 40 frames after the initiation of the bout (the latter probably not needed)
+    startThreshold = popt[2]*4
+    print('start thresh is ' + str(startThreshold))
+    stopThreshold = popt[2]
+    print('stop thresh is' + str(stopThreshold))
+    smooth=AZU.smoothSignal(dM,5)
+    for i, m in enumerate(smooth):
+        br=0
+        if(moving == 0):
+            if br==1:
+                break
+            if m > startThreshold:
+                moving = 1
+                boutStarts.append(i)
+                ii=i
+        else:
+            if np.abs(m)<stopThreshold and i>ii+40:
+                for k in range(i,i+5):
+                    if np.abs(dM[k]) > stopThreshold:
+                        break
+                    else:
+                        moving = 0
+    
+    # Extract all bouts (ignore last and or first, if clipped)
+    boutStarts = np.array(boutStarts)
+    for i in range(0,len(boutStarts)):
+        boutStops.append((boutStarts[i]-preWindow)+postWindow)
+    boutStops = np.array(boutStops)
+    
+    while(len(boutStarts) > len(boutStops)):
+        boutStarts = boutStarts[:-1]
+    while(len(boutStops) > len(boutStarts)):
+        boutStops = boutStops[:-1]
+    if len(boutStarts)!=0:
+        if(boutStarts[0]<preWindow+1):
+            boutStarts=boutStarts[1:] 
+            boutStops=boutStops[1:]        
+    if len(boutStarts)!=0:
+        if(boutStarts[len(boutStarts)-1]+postWindow>len(motion_signal)):
+            boutStarts=boutStarts[:-1]
+            boutStops=boutStops[:-1]
+        
+    # Return if failed to find any unclipped bouts
+    if(len(boutStarts)==0 or len(boutStops)==0): 
+        return -1,-1, -1, -1, -1, -1, -1, -1, -1, -1,-1,-1,-1,-1
+    # threshold on maximum
+#    keep = np.zeros(len(boutStarts))
+#    for i,b in enumerate(boutStarts):
+#        mm=np.max(AZU.smoothSignal(motion_signal[b-preWindow:b+postWindow],5))>1.2
+#        if mm: keep[i]=1
+#    keep=keep!=0
+#    boutStarts=boutStarts[keep]
+#    boutStops=boutStops[keep]
+    
+    # Count number of bouts
+    numBouts= len(boutStarts)
+    numberOfSeconds = np.size(motion_signal)/FPS  
+
+    # Set the bouts per second (BPS)
+    boutsPerSecond = numBouts/numberOfSeconds
+    
+    # Extract the bouts; distance, motion_signal, orientation and angles
+    boutStarts = boutStarts[(boutStarts > preWindow) * (boutStarts < (len(motion_signal)-postWindow))]
+
+    allBoutsDist = np.zeros([len(boutStarts), (preWindow+postWindow)])    
+    allBouts = np.zeros([len(boutStarts), (preWindow+postWindow)])
+    allBoutsOrt = np.zeros([len(boutStarts), (preWindow+postWindow)])
+    boutAngles = np.zeros(len(boutStarts))
+    
+    for b in range(0,len(boutStarts)):
+        allBoutsDist[b,:] = distPerSec[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)] # extract velocity over this bout
+        allBouts[b,:] = motion_signal[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)] # extract velocity over this bout
+        allBoutsOrt[b,:] = rotateOrt(ort[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)]) # extract heading for this bout (rotated to zero initial heading)
+        boutAngles[b] = np.mean(allBoutsOrt[b,-2:-1])-np.mean(allBoutsOrt[b,0:1]) # take the heading before and after
+
+    Lturns=np.zeros(len(boutAngles))    
+    Rturns=np.zeros(len(boutAngles))    
+    FSwims=np.zeros(len(boutAngles))
+    
+    for i,angle in enumerate(boutAngles):
+        if angle > 10: 
+            Lturns[i]=1
+        elif angle < -10:
+            Rturns[i]=1
+        else:
+            FSwims[i]=1
+    Rturns=Rturns!=0
+    Lturns=Lturns!=0
+    FSwims=FSwims!=0
+    LturnPC=(np.sum(Lturns)/(np.sum(Lturns)+np.sum(Rturns)))*100
+    
+    if plot:
+        plt.figure('Bout finder Analysis First min')
+        xFr=range(len(motion_signal))
+        x=np.divide(xFr,FPS)
+        ef=FPS*1*60
+        plt.plot(x[:ef],motion_signal[:ef])
+        boutStartMarker=np.zeros(len(motion_signal[:ef]))
+        boutMarker=np.zeros(len(motion_signal[:ef]))
+        for i in range(len(boutStarts[boutStarts<(ef-postWindow)])):
+            boutStartMarker[boutStarts[i]]=10
+            boutMarker[(boutStarts[i]-preWindow):(boutStarts[i]+postWindow)]=10
+    
+        plt.plot(x[:ef],boutStartMarker,'-r',linewidth=0.5)
+#        plt.plot(x,boutMarker)
+        plt.fill_between(x[:ef],boutMarker,0,alpha=0.4,color='Orange')
+        figName='Bout finder Analysis'
+        plt.title(figName)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Motion energy (AU)')
+        
+        if plot and save:
+            savepath=savepath+ '\\BoutFinder\\'
+            AZU.cycleMkDir(savepath)
+            saveName=savepath + name+'_BoutFinder.png'
+            plt.savefig(saveName,dpi=600)
+            
+    while(len(boutStarts) > len(boutStops)):
+        boutStarts = boutStarts[:-1]
+    while(len(boutStops) > len(boutStarts)):
+        boutStops = boutStops[:-1]
+        
+    return ret,Rturns,Lturns,FSwims,boutsPerSecond, allBouts, allBoutsDist, allBoutsOrt, boutAngles, LturnPC, boutStarts, boutStops, motion_signal, dM
+  
+# rotate the orientation trace so that the initial heading is zero
+def rotateOrt(ort):
+    ort_rot=np.zeros(len(ort))
+    ort_init=ort[0]
+    for i,thisOrt in enumerate(ort):
+        o=thisOrt-ort_init
+        oAbs=np.abs(o)
+        if o>180:
+            o=(180-(o-180))*-1
+        elif o<-180:
+            o=180-(oAbs-180)
+            
+        ort_rot[i]=o
+    return ort_rot
+        
+        
+
+## compute cumulative angle from heading
+def computeCumulativeAngle(ort,plot=True,FPS=120):
+    # rotate heading so starting heading is zero
+    ortRot=rotateOrt(ort)
+    
+    ortDiff=np.diff(ortRot)# differentiate the headings
+    ortDiff=AZU.filterTrackingFlips(ortDiff) # check for unlikely flips in the tracking caused by blurred eyes during movement (assumes turns of more than 100 degrees are impossible... which they are not)
+    ortDiffAbs=np.abs(ortDiff) # take the absolute
+    ort2pi=360-ortDiffAbs # subtract a circle from the absolute difference
+    
+    # we will now compare ort2pi and ortDiffAbs to accumulate the smallest in magnitude but keep the sign. 
+    cumOrt=np.zeros(len(ortDiff)-1)
+    for i in range(len(cumOrt)):
+        if i !=0: 
+           if ort2pi[i]<ortDiffAbs[i]:
+               cumOrt[i]=ort2pi[i]+cumOrt[i-1]
+           else:
+               cumOrt[i]=ortDiff[i]+cumOrt[i-1]
+    ortAbs=AZU.accumulate(ortDiffAbs)
+    totAngle=ortAbs[-1]               
+    cumAngle=cumOrt[-1]
+    avAngVel=cumAngle/((len(cumOrt))/FPS)
+    bias=cumAngle/totAngle # positive is left turns, negative is right turns
+
+    if(plot):
+        xFr=range(len(ort))
+        x=np.divide(xFr,FPS)
+        plt.figure()
+        plt.plot(x,cumOrt)
+        plt.title('Cumulative angle')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Cumulative angle (degrees from initial heading)')
+
+    return avAngVel,bias,cumOrt
+
+
+def unpackGroupDictFile(dicFileName):
+    dic=np.load(dicFileName,allow_pickle=True).item()
+    met=dic['Metrics']
+    avg=dic['avgData']
+    name=dic['Name']
+    avgCumDistAV=met['cumDist']['Mean']
+    avgCumDistSEM=met['cumDist']['SEM']
+    avgBoutAV=met['avgBout']['Mean']
+    avgBoutSEM=met['avgBout']['SEM']
+    avgHeatmap=met['avgHeatmap']['Mean']
+    avgVelocity=avg['avgVelocity']
+    avgAngVelocityBouts=avg['avgAngVelocityBout']
+    biasLeftBout=avg['biasLeftBout']
+    LTurnPC=avg['LTurnPC']
+    avgBoutAmps=avg['boutAmps']
+    allBPS=avg['BPSs']
+    
+    return name,avgCumDistAV,avgCumDistSEM,avgBoutAmps,allBPS,avgBoutAV,avgBoutSEM,avgHeatmap,avgVelocity,avgAngVelocityBouts,biasLeftBout,LTurnPC    
+
+def poolFishDict(dictList=[]):####NOT FINISHED OR REALLY NEEDED AT THIS POINT
+    
+    if(len(dictList)==0):
+        print("Please provide a list of dictionaries to analyse (filepaths or dictionaries themselves)")
+        return -1
+    
+    if(isinstance(dictList[0],str)):
+        dictNameList=dictList
+        dictList=[]
+        for i,dicName in enumerate(dictNameList):
+            dictList[i]=np.load(dicName,allow_pickle=True)
+        
+    elif(isinstance(dictList[0],dict)==False):
+        print("Please provide a list of dictionaries to analyse (filepaths or dictionaries themselves)")
+    
+###############################################################################    
 # Compute Viewing Preference Index
 def computeVPI(xPositions, yPositions, testROI, stimROI, FPS=120):
      
@@ -201,14 +676,22 @@ def computeVISIBLE(xPositions, yPositions, testROI, stimROI):
     
     return AllVisibleFrames_Y_TF
 
-def findBoutAmp(allBouts):
+def findBoutArea(allBouts, FPS=120):
+    
+    areaBouts=[]
+
+    for i,bout in enumerate(allBouts):
+#        print("I'm here on bout number " + str(i))
+        plt.plot(bout)
+        areaBouts.append(np.trapz(bout-np.min(bout), dx=1/FPS))
+        
+    return areaBouts
+    
+def findBoutMax(allBouts):
     
     ampBouts=np.zeros(len(allBouts))
     for i in range(len(allBouts)):
-        ampBouts[i]=(max(allBouts[i,:]))
-        
-    hist=np.histogram(ampBouts,)
-        
+        ampBouts[i]=(np.max(allBouts[i]))
         
     return ampBouts
 

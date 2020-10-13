@@ -14,22 +14,10 @@ import cv2
 import AZ_utilities as AZU
 
 # Process Video : Track fish in AVI
-def arena_fish_tracking(aviFile, output_folder, ROI):
-    #############################################
-    ##### set flags, 1 for ON 0 for OFF #########
-    l=0
-    plot=1
-    cropOp=1
-    FPS=120
-    saveCroppedMovie=1
-    #############################################
-    ############# Other settings ################
-    #############################################
-    cropSize=[128,128] # size in pixels of area to crop around fish after initially finding it
-    startFrame=0   # use this to skip frames at start of a movie (light, pipette, water ripple, bubbles, iniitial escape swim etc)
+def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,saveCroppedMovie=1,cropSize=[128,128],startFrame=0):
+
+    #    l=0
     
-    
-        
     if plot==1:
         pmsg='ON'
     else:
@@ -38,8 +26,12 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         cmsg='ON'
     else:
         cmsg='OFF. WARNING!! Tracking can take a very long time with cropping turned OFF'
+    if saveCroppedMovie==1:
+        smsg='ON. WARNING!! this takes some time'
+    else:
+        smsg='OFF'
         
-    message='Tracking fish with plotting turned ' + pmsg + ' and cropping turned ' + cmsg
+    message='Tracking fish with plotting turned ' + pmsg + ' and cropping turned ' + cmsg + '. Cropped movie generation is ' + smsg
     print(message)
     
     d,expName=aviFile.rsplit('\\',1)  # take last part of aviFile path
@@ -57,6 +49,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     else:
         w, h = get_ROI_size(ROI, 0)
     OrigROI=np.copy(ROI)
+    
+    failedAviFiles=False
     # Compute a "Starting" Background
     # - Median value of 100 frames sampled evenly across first 30 secs
     
@@ -76,9 +70,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     # 9. Find crop region based on fx,fy coordinates and provided cropSize
     # 10. Crop previous_ROI, current, and background on following loops (steps 3 through 7)
     # 11. Save cropped movie
-    
-    startFrame=0
+    #maxNumFrames=432000
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second), and the first 30 seconds
+    #if numFrames>maxNumFrames:numFrames=maxNumFrames
+    
     numFrames=numFrames-startFrame
     previous_ROI=[]
     previous_ROI.append(np.zeros((h,w),dtype = np.uint8))
@@ -97,32 +92,52 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     ortS = np.zeros((numFrames,1))          # heading/orientation (angle from body to eyes)
     motS = np.zeros((numFrames,1))          # frame-by-frame change in segmented particle
       
-#    if(saveCroppedMovie==1):
-#        croppedMovie=[]
-    
     cropFlag = 0
     vid.set(cv2.CAP_PROP_POS_FRAMES, startFrame)    # start at startFrame
     print('Tracking')
     
+    noContoursCount=0               
+    limitError=0.1
+    limitFrames=np.floor(numFrames*limitError)
     for f in range(numFrames):
-        print(f+startFrame)
-        # Report Progress every 120 frames of movie
+#        print(f)
+#        if(f==4157):
+#            print('here')
+#        # Report Progress every 120 frames of movie
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
         
-        # Read next frame        
+        
+        ################### TESTING ######################
+#        if(f==72016):
+#            print('here')
+#        print(f)
+#        print(f+startFrame)
+        ##################################################
+        
+        # Read next frame 
         ret, im = vid.read()
+        errF=-1
+        
+        # check we haven't lost the fish (more than 10% of movie continuously)
+        # return error frame and break the loop
+        if(noContoursCount>limitFrames):
+            failedAviFiles=True
+            errF=f-noContoursCount
+            break
         
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         crop, xOff, yOff = get_ROI_crop(current, ROI,0)
         background, xOff, yOff = get_ROI_crop(backgroundFull, ROI,0)                      
         diffimg= background - crop                
-        diffimg[diffimg>220] = 0  #remove nearly saturated differences (not sure where these come from... water evaporation and vibration from drilling maybe?)
+        diffimg[diffimg>220] = 0  #remove nearly saturated differences; at edges of objects (not sure where these come from... water evaporation and vibration from drilling maybe?)
             # 0.005 s
             
         # Determine current threshold
-        threshold_level = np.median(background)/6      
+        # Because the edges are much lower in intensity, this can mess with the threshold if too much of the image is black
+        # therefore we only include values above 30 (lowest measured pixel value of navigable chamber at set IR intensity)
+        threshold_level = np.median(background[background>30])/6     
         
         # Threshold            
         level, threshold = cv2.threshold(diffimg,threshold_level,255,cv2.THRESH_BINARY)
@@ -138,10 +153,11 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
             
         # Create Binary Mask Image
         mask = np.zeros(crop.shape,np.uint8)
-                       
+        
         # If there are NO contours, then skip tracking
         if len(contours) == 0:
             print('No Contour')
+            noContoursCount+=1
             if f!= 0:
                 area = -1.0
                 fX = fxS[f-1] - xOff
@@ -162,15 +178,16 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 eY = yOff
                 heading = -181.0
                 motion = -1.0
-        
+                
         else:
-            
+            noContoursCount=0   # Reset contour count if we found the fish again
             # Get Largest Contour (fish, ideally)
-            largest_cnt, area = get_largest_contour(contours)
+            largest_cnt, area = get_largest_contour(contours,mask,area_limit=285)
             
             # If the particle to too small to consider, skip frame
             if area == 0.0:
                 print('Particle too small')
+                noContoursCount+=1
                 if f!= 0:
                     fX = fxS[f-1] - xOff
                     fY = fyS[f-1] - yOff
@@ -194,8 +211,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
             else:
                 # Draw contours into Mask Image (1 for Fish, 0 for Background
                 cv2.drawContours(mask,[largest_cnt],0,1,-1) # -1 draw the contour filled
-                pixelpoints = np.transpose(np.nonzero(mask))
+                pixels = np.nonzero(mask)
                 
+                #Check the contour isn't a ridiculous shape
+                pixelpoints = np.transpose(pixels)
                 # Get Area (again)
                 area = np.size(pixelpoints, 0)
                 
@@ -273,8 +292,6 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
                 # Now crop the movie around the fish
                 # crop movie here and recompute diffimg if working with the first frame
                 # find start and end positions for cropping around the located fish
-                if(f==69720):
-                    print('here')
                 crop,startIdX,startIdY,endIdX,endIdY=cropImFromTracking(vid,current,fX + xOff,fY + yOff,cropSize)
                 ROI=np.asarray([[startIdX,startIdY,cropSize[0],cropSize[1]]])
                 # If this is the first time, then we have found the fish on the whole image. Will work with cropped images from now on
@@ -304,18 +321,31 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
         # -----------------------------------------------------------------
         # Update the whole background estimate (everywhere except the (dilated) Fish)
         # Every 2 mins, recompute complete background
-        
-        if((f%(FPS*(2*60))==0)&f!=0):
-            backgroundFull=recomputeBackground(vid,f,OrigROI)
-            vid.set(cv2.CAP_PROP_POS_FRAMES,f) # reset frame number
-            background, xOff, yOff = get_ROI_crop(backgroundFull, ROI,0)
-
-#        current_background = np.copy(backgroundFull)            
-#        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(10,10))
-#        dilated_fish = cv2.dilate(mask, kernel, iterations = 2)           
+        backgroundInterval=int(FPS*120)
+       
+        if((f%(backgroundInterval)==0) & (f!=0)):
+            current_background=np.copy(backgroundFull)
+            backgroundFull,_=recomputeBackground(vid,f+startFrame,OrigROI)
+            
+            # Figure out where fish pixels are in the full image: hideous coding but the ndarray is messy to play with
+            largest_cntFull=np.copy(largest_cnt)
+            for i in range(len(largest_cnt)): # cycle through pixels
+                largest_cntFull[i][0][0]+=xOff
+                largest_cntFull[i][0][1]+=yOff
+            
+            # Draw the fish onto maskFull
+            maskFull=np.zeros(current.shape)
+            cv2.drawContours(maskFull,[largest_cntFull],0,1,-1) # -1 draw the contour filled
+            pixels = np.nonzero(maskFull)
+            # Dilate the fish and exclude it from the updated background
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(10,10))
+            dilated_fish = cv2.dilate(maskFull, kernel, iterations = 2)                       
+            backgroundFull[dilated_fish==1] = current_background[dilated_fish==1]
+            
+            vid.set(cv2.CAP_PROP_POS_FRAMES,f+startFrame) # reset frame number
+            print('continuing tracking')            
+            
 #        updated_background = (np.float32(crop) * 0.01) + (current_background * 0.99)
-#        updated_background[dilated_fish==1] = current_background[dilated_fish==1]            
-#        background = np.copy(updated_background)
         # 0.02s every frame
         # ---------------------------------------------------------------------------------
         # Plot Fish in Movie with Tracking Overlay?
@@ -367,17 +397,27 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
 # Save Tracking Summary
         if(f == 0):
 #            print('Making tracking image')
-            plt.savefig(output_folder + '\\' + expName + '_initial_tracking.png', dpi=300)
+            path=output_folder + '\\' + expName + '_initial_tracking.png'
+            plt.savefig(path, dpi=300)
+#            AZU.createShortcutTele(path)
+            
             plt.figure('backgrounds')
             plt.imshow(backgroundFull)
-            plt.savefig(output_folder+'\\' + expName +'_initial_background.png', dpi=300)
+            path=output_folder+'\\' + expName +'_initial_background.png'
+            plt.savefig(path, dpi=300)
+#            AZU.createShortcutTele(path)
             plt.close('backgrounds')
        
         if(f == numFrames-1):
-            plt.savefig(output_folder+'\\' + expName +'_final_tracking.png', dpi=300)
+            path=output_folder+'\\' + expName +'_final_tracking.png'
+            plt.savefig(path, dpi=300)
+#            AZU.createShortcutTele(path)
+            
             plt.figure('backgrounds')
             plt.imshow(backgroundFull)
-            plt.savefig(output_folder+'\\' + expName +'_final_background.png', dpi=300)
+            path=output_folder+'\\' + expName +'_final_background.png'
+            plt.savefig(path, dpi=300)
+#            AZU.createShortcutTele(path)
             plt.close('backgrounds')
             
         if(f==math.floor(numFrames/2)):
@@ -390,8 +430,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
             # create out write object
             width=cropSize[0]
             height=cropSize[1]
-            out = cv2.VideoWriter(saveName+'.avi',cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
-            
+            out = cv2.VideoWriter(saveName, cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
+#            AZU.createShortcutTele(saveName)
         if(saveCroppedMovie==1):
             im_crop,_,_,_,_=cropImFromTracking(vid,current,fxS[f],fyS[f],cropSize)
             out.write(im_crop)
@@ -412,12 +452,15 @@ def arena_fish_tracking(aviFile, output_folder, ROI):
     print('Finished tracking')
    
     # Return tracking data
-    return fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS
+    return fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS, failedAviFiles, errF
 
 ###############################################################################
-# Crop a single frame using tracking coordinates and return crop indices    
+# Crop a single frame using tracking coordinates and return cropped frame and crop indices    
 def cropImFromTracking(vid,im,fx,fy,cropSize):
-    
+
+    if(math.isinf(fx)):
+        print('here')
+        
     startIdX = math.ceil(fx) - math.ceil(cropSize[0] / 2)
     endIdX = math.ceil(fx) + math.ceil(cropSize[0] / 2)
     startIdY = math.ceil(fy) - math.ceil(cropSize[1] / 2)
@@ -435,11 +478,11 @@ def cropImFromTracking(vid,im,fx,fy,cropSize):
         endIdX=endIdX+(startIdX*-1)
         startIdX=0
     if(endIdX>wFull):
-        startIdX=startIdX-(wFull-endIdX)
         endIdX=wFull
+        startIdX=endIdX-(cropSize[0])
     if(endIdY>hFull):
-        startIdY=startIdY-(hFull-endIdY)
         endIdY=hFull
+        startIdY=endIdY-(cropSize[1])
         
     im_crop=im[startIdY:endIdY,startIdX:endIdX]
     return im_crop,startIdX,startIdY,endIdX,endIdY
@@ -502,9 +545,9 @@ def get_ROI_size(ROIs, numROi):
     
     return width, height
 
-def recomputeBackground(vid,f,ROI):
+def  recomputeBackground(vid,f,ROI):
     
-    print('Updating background (' + str((f/600)*5) + ' mins done)')
+    print('Updating background (' + str((f/120)/60) + ' mins done)')
     # Allocate space for ROI background
     background_ROI = []
     w, h = get_ROI_size(ROI, 0)
@@ -516,6 +559,13 @@ def recomputeBackground(vid,f,ROI):
     stepFrames = 360 # Check background frame every 3 seconds
     startFrame=f-(math.floor(stepFrames*math.floor((bFrames/2))))
     endFrame=f+(math.ceil(stepFrames*math.floor((bFrames/2))))
+    
+    # check we do not run off the end of the video; run the 30 second window back back if needed, 'stepFrames' at a time
+    nF = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+    while(endFrame>nF):
+        endFrame-=stepFrames
+        startFrame-=stepFrames
+        
     backgroundStack = np.zeros((crop_height, crop_width, bFrames), dtype = np.float32)  
     previous = np.zeros((crop_height, crop_width), dtype = np.float32)
     vid.set(cv2.CAP_PROP_POS_FRAMES,f) 
@@ -547,11 +597,11 @@ def recomputeBackground(vid,f,ROI):
                 break
     
     # Compute background
-    print('collapsing')
     backgroundStack = backgroundStack[:,:, 0:bCount]
-    background_ROI = np.uint8(np.median(backgroundStack, axis=2))
+    BG = np.uint8(np.median(backgroundStack, axis=2))
+    
     # Return updated background
-    return background_ROI
+    return BG,changes
         
         
 def compute_initial_background(vid, ROI):
@@ -564,7 +614,7 @@ def compute_initial_background(vid, ROI):
     
     # Find initial background for the ROI
     crop_width, crop_height = get_ROI_size(ROI, 0)
-    bFrames = 100
+    bFrames = 20
     #stepFrames = np.int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
     stepFrames = 360 # Check background frame every 3 seconds
     
@@ -572,7 +622,7 @@ def compute_initial_background(vid, ROI):
     previous = np.zeros((crop_height, crop_width), dtype = np.float32)
 
     # Store first frame
-    vid.set(cv2.CAP_PROP_POS_FRAMES, 200) # skip first 200 frames
+    vid.set(cv2.CAP_PROP_POS_FRAMES, 0) # skip first 200 frames
     ret, im = vid.read()
     current = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
     crop, xOff, yOff = get_ROI_crop(current, ROI,0)
@@ -591,7 +641,7 @@ def compute_initial_background(vid, ROI):
     
         # Measure change from current to previous frame
         absdiff = np.abs(previous-crop)
-        level = np.median(crop)/7
+        level = np.median(crop[crop>30])/6
         change = np.mean(absdiff > level)
         changes.append(change)
         previous = np.copy(crop)
@@ -623,14 +673,22 @@ def get_ROI_crop(image, ROIs, numROi):
     return crop, c1, r1
 
 # Return largest (area) cotour from contour list
-def get_largest_contour(contours):
+def get_largest_contour(contours,mask,area_limit=240,length_limit=100):
     # Find contour with maximum area and store it as best_cnt
     max_area = 0
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if area > max_area:
+        mask=np.zeros(mask.shape)
+        cv2.drawContours(mask,[cnt],0,1,-1) # -1 draw the contour filled
+        pixels = np.nonzero(mask)
+        Ylength=max(pixels[0])-min(pixels[0])
+        Xlength=max(pixels[1])-min(pixels[1])
+            
+        # check the contour isn't a silly shape (and therefore unlikely to be a fish)
+        if area > max_area and area<area_limit and Ylength<length_limit and Xlength<length_limit:
             max_area = area
             best_cnt = cnt
+            
     if max_area > 0:
         return best_cnt, max_area
     else:
