@@ -194,31 +194,43 @@ def probSeqTrip(boo,pot=['F','L','R']):
 # compute the cumulative probability of bouts occurring in streaks. Combines streaks from different bout types
     # currently only works for lft and right turns with forward swims omitted
 def probStreak_L_OR_R(boo,pot=['L','R']):
-
+    
+    ForwOutOfStreakCount=0
     streakTag=np.zeros(len(boo))
     for i,t in enumerate(boo):
         # check we haven't scanned this one already and break the loop if we have
-        if streakTag[i]==0:
+        if t=='F':
+            ForwOutOfStreakCount+=1
+        if streakTag[i]==0: #and t!='F':
             thisStreakLength = 1
             count=1
         
         #check we're not at the end
             if (i + count) != len(boo):
-        
-                while t==boo[i+count]:
+                
+                while t==boo[i+count]: # or boo[i+count]=='F':
+#                    if boo[i+count]=='F':
+#                        forwThisStreak+=1
                     count+=1
                     thisStreakLength+=1
                     if i+count>len(boo)-1:break
             
             # now fill in the list of bout sequence lengths
             for plus in range(0,thisStreakLength):streakTag[i+plus]=thisStreakLength
-    
+            
+#            ########################## FIGURE THIS OUT!!! #############################
+#            # now fill in a  list of forward proportions for this streak length
+#            propStreakForw=[]
+#            for j in range(0,20): # for each potential streak length
+#                if thisStreakLength==j: # if the streak length falls in this range
+#            ########################## FIGURE THIS OUT!!! #############################                    
+            
     # Now find the cumulative probability that a bout will fall in a streak at least x long
     numBouts=len(streakTag)
     cumProbS=[]
-    for i in range(1,20):
-        if i == 1 : cumProbS.append(np.sum(streakTag==i)/numBouts)
-        else : cumProbS.append(((np.sum(streakTag==i))/numBouts)+cumProbS[i-2])
+    for i in range(1,20): # for each potential streak length...
+        if i == 1 : cumProbS.append(np.sum(streakTag==i)/numBouts) # if its the first pass, create the starting value
+        else : cumProbS.append(((np.sum(streakTag==i))/numBouts)+cumProbS[i-2]) # else add it to the previous one
         
     return cumProbS
     

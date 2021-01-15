@@ -4,67 +4,48 @@ Created on Wed Apr 29 11:46:22 2020
 
 @author: thoma
 """
-import os
+
 # Set Library Paths
 lib_path = r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
+
 import sys
 sys.path.append(lib_path)
 import numpy as np
 import AZ_utilities as AZU
+import AZ_summary as AZS
+import AZ_analysis_testing as AZA
 import glob
 import AZ_ROITools as AZR
 import AZ_streakProb as AZP
 import cv2
 
+FPS=120
+
 folderListFile=[]
 trackingFolder=[]
 trackingSHFolder=[]
 
-###############################################################################
 # Specify Folder List of original files OR define the path to the tracking data shortcut folder
 #folderListFile = r'D:\Movies\FolderLists\AllCtrl.txt'
 
 # OR
 
-trackingSHFolder = r'D:\\Movies\\GroupedData\\Groups\\EA_B0\\'
-inSuff='EA_B0'
-outSuff='EA_B0'
-AnalysisFolderRoot=r'D:\\Analysis'
+trackingSHFolder = r'D:\\Movies\\GroupedData\\Groups\\EmxGFP_Asp_Damage\\'
+
 # Set Flags
 createSpatialFigures=True
-keepSpatialFigures=False
-sameROIs = False
-omitForward=False
+keepSpatialFigures=True
+sameROIs = True
 
-# Specify start and end frame that is included from tracking data
-sf=0*60*120
-ef=-1
-
-# Specify the names of all ROIs you have or want to define
-#ROINames=[]
-ROINames=['Centre','Surround']
-#ROINames=['Centre']
-#ROINames=['Top Left','Top','Top Right','Middle Left','Central Chamber', 'Middle Right', 'Bottom Left','Bottom','Bottom Right']
-#ROI_masks=np.load('C:/Users/thoma/OneDrive/Documents/GitHub/Arena_Zebrafish/Arena/M0_ROIMasks.npy')
-ROI_masks=np.load('C:/Users/thoma/OneDrive/Documents/GitHub/Arena_Zebrafish/Arena/B0_CentreSurround.npy')
-# other group parameters
-FPS=120
-
-
-###############################################################################
-
-if omitForward:
-    inSuff=inSuff+'_FO'
-    outSuff=outSuff+'_FO'
-    
+#ROINames=['RestrictedCentre']
+ROINames=['Top Left','Top','Top Right','Middle Left','Central Chamber', 'Middle Right', 'Bottom Left','Bottom','Bottom Right']
 numROIs=len(ROINames)
+
 trackingFiles=[]
 trackingNameList=[]
 trackingList=[]
 aviNameList=[]
 opt=-1
-
-
 ## Compile list of tracking files based on input folders. Also build list of corresponding movies to extract a few frames and draw ROIs
 if(len(folderListFile)!=0 and len(trackingSHFolder)==0): # then we are dealing with a folderList rather than a folder of shortcuts
     opt=1
@@ -73,7 +54,7 @@ if(len(folderListFile)!=0 and len(trackingSHFolder)==0): # then we are dealing w
 
     # Bulk analysis of all folders
     for idx,folder in enumerate(folderNames):
-        _,templateFolder,trackingFolder = AZU.get_analysis_folders(folder)
+        _,trackingFolder = AZU.get_analysis_folders(folder)
         
         # grab tracking files
         trackingSubFiles = glob.glob(trackingFolder + r'\*.npz')
@@ -100,13 +81,9 @@ elif(len(folderListFile)==0 and len(trackingSHFolder)!=0): # then we are dealing
             if(ret==0):
                 wDir,_,f=path.rsplit(sep='\\',maxsplit=2)
                 trackingFolder=wDir + '\\Tracking\\'
-                templateFolder=wDir + '\\Templates\\'
-                 
                 f=f[0:-13]
                 trackingNameList.append(glob.glob(trackingFolder + r'\\*' + f + '*.npz'))
-                aviCheck=glob.glob(templateFolder + r'\\*' + f + '*.avi')
-                if aviCheck==[]: aviCheck=glob.glob(wDir + r'\\*' + f + '*.avi')
-                aviNameList.append(aviCheck)
+                aviNameList.append(glob.glob(wDir + r'\\*' + f + '*.avi'))
             else:
                 print('Broken Link detected for' + f)
 elif((len(folderListFile)==0 and len(trackingFolder)==0) or opt==-1):
@@ -117,7 +94,6 @@ tBool=[]
 
 for i,s in enumerate(trackingNameList):
     tBool.append(s!=[] and aviNameList[i]!=[])
-#    tBool.append(True)
     
 trackinglList = [i for indx,i in enumerate(trackingNameList) if tBool[indx]]
 avilList = [i for indx,i in enumerate(aviNameList) if tBool[indx]]
@@ -136,35 +112,17 @@ for i,_ in enumerate(trackinglList):
 # check nothing went dramatically wrong with these steps
 if len(trackingList)!=len(aviList):
     sys.exit('Something went very wrong! The aviList and trackingList are different lengths... exiting')
-
-# check through to make sure all files exist
-print('Checking files exist...')
-for i,trackingFile in enumerate(trackingFiles):
-    if os.path.exists(trackingFile)==False:
-        print('Error, ' + trackingFile + ' does not exist... removing from list')
-        trackingFiles.remove(trackingFile)
-        missingFiles.append(trackingFile)
-        
+    
 # Loop through files tracking data             
 for i,trackingFile in enumerate(trackingList):
-    avi=aviList[i]
+    vid=cv2.VideoCapture(aviList[i])
     print('Performing spatial analysis on ' + trackingFile)
     wDir,name,date,gType,cond,chamber,fishNo=AZU.grabFishInfoFromFile(trackingFile)
     fx,fy,bx,by,ex,ey,area,ort,motion=AZU.grabTrackingFromFile(trackingFile)
-    if(ef>len(fx)) : ef = -1
-    # check that the analysis includes all the tracking and crop if needed. This might be needd if you are, for example, looking at a subsection of a movie's tracking data
-    fx=fx[sf:ef]
-    fy=fy[sf:ef]
-    bx=bx[sf:ef]
-    by=by[sf:ef]
-    ex=ex[sf:ef]
-    ey=ey[sf:ef]
-    area=area[sf:ef]
-    ort=ort[sf:ef]
-
-    # if sameROIs is False, this module displays template frame created during tracking of the selected movie and gives you three seconds to press escape and define new ROIs. Otherwise, the previous ROIs will be used
+    
+    # if sameROIs is False, this module displays frame 10 of the selected movie and gives you three seconds to press escape and define new ROIs. Otherwise, the previous ROIs will be used
     if sameROIs==False:
-        img = AZU.grabFrame(avi,0)
+        img = AZU.grabFrame(vid,10)
         cv2.namedWindow('Check', flags=cv2.WND_PROP_FULLSCREEN)
         font                   = cv2.FONT_HERSHEY_SIMPLEX
         bottomLeftCornerOfText = (10,500)
@@ -192,7 +150,7 @@ for i,trackingFile in enumerate(trackingList):
         ROI_masks=[]
         while len(ROI_poly)!=numROIs:
             for ROIName in ROINames:
-                polydata,mask=AZR.drawPoly(avi,ROIName) # ROI GUI
+                polydata,mask=AZR.drawPoly(vid,ROIName) # ROI GUI
                 ROI_poly.append(polydata.points)
                 ROI_masks.append(mask)
     
@@ -200,10 +158,8 @@ for i,trackingFile in enumerate(trackingList):
     # Now we want to define which bits of the movie the fish is in on a frame by frame basis. 
     
     # create empty arrays to draw where the fish is and to tag frames for each ROI
-    vid=cv2.VideoCapture(aviList[i])
     w = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    vid.release()
     ROI_Tag=np.zeros(len(bx))
     ROI_Tag[:]=-1
     framesInROI=np.zeros(numROIs)
@@ -228,11 +184,10 @@ for i,trackingFile in enumerate(trackingList):
                 break
         if f>0 and ROI_Tag[f]==-1:  # if no ROI is found, assume fish is in the same ROI as previous frame
             ROI_Tag[f]=ROI_Tag[f-1]
-    if ROI_masks==[]:ROI_Tag[:]=0
-                
+            
     # now grab the boutStarts from file (non ROI dictionary)
-    AnalysisFolder=AnalysisFolderRoot + inSuff + '\\Dictionaries\\'
-    thisFishDictName=AnalysisFolder+name+'_ANALYSIS_' + inSuff + '.npy'
+    AnalysisFolder=wDir+'\\Analysis\\'
+    thisFishDictName=AnalysisFolder+name+'_ANALYSIS.npy'
     dic=np.load(thisFishDictName,allow_pickle=True).item()
     starts = dic['data']['boutStarts']
     
@@ -244,9 +199,9 @@ for i,trackingFile in enumerate(trackingList):
         if(i==np.floor(len(starts)/2)): print('Halfway there...')
         if(i==(len(starts)-1)):print('Done')
         
-        while ROI_Tag[boutStart]==-1 and boutStart<numFrames: # if the start frame for this bout happens to be -1 (could not determine ROI for this frame) then cycle along until you find one
+        while ROI_Tag[boutStart]==-1: # if the start frame for this bout happens to be -1 (could not determine ROI for this frame) then cycle along until you find one
             boutStart+=1
-        
+            
         ROI_boutTag[i]=ROI_Tag[boutStart]
         
     ## Now I want to section out the tracking data for all chunks of each ROI and compute all our things for them. Easiest way to do this with existing code is to write seperate tracking files for each segment that we then feed into the analysis. 
@@ -255,7 +210,7 @@ for i,trackingFile in enumerate(trackingList):
     allBoutsS=[]
     allBoutsOrtS=[]
     allBoutsDistS=[]
-    LturnPCS=[]
+    LTurnPCS=[]
     boutAnglesS=[]
     boutSeqS=[]
     seqProb1S=[]
@@ -277,11 +232,7 @@ for i,trackingFile in enumerate(trackingList):
     data=dic['data']
     dist = data['distPerFrame']
     # Now we have tagged every frame with the ROI the fish is in for each point. First let's compute time spent in each ROI 
-#    while len(dist)>len(ROI_Tag): ROI_Tag.append(-1)
-#    while len(ROI_Tag)>len(dist): ROI_Tag=ROI_Tag[:-1]
-    ##### START OF ROI LOOP 1 #####
     for r in range(numROIs):
-        if(r==0):print('Looping through ROIs')
         framesInROI[r]=np.sum(np.asarray(ROI_Tag==r))
         timeInROI_PC[r]=np.format_float_positional((framesInROI[r]/numFrames),precision=4, unique=False, fractional=False, trim='k')
 
@@ -312,18 +263,15 @@ for i,trackingFile in enumerate(trackingList):
         
         # recompute things for this ROI
         ##### OVERALL METRICS #####
-        
+        ### distPerFrame ###
+        distPerFrameS.append(distPerFrame)
         if len(distPerFrame)>1:
-            ### distPerFrame ###
-            distPerFrameS.append(distPerFrame)
             ### cumDist ###
             cumDist=AZU.accumulate(distPerFrame)
             cumDistS.append(cumDist)
             ### avgVelocity ###
             avgVelocityS.append(cumDist[-1] /(len(cumDist)/FPS))
         else: 
-            ### distPerFrame ###
-            distPerFrameS.append(-1)
             ### cumDist ###
             cumDistS.append(-1)
             ### avgVelocity ###
@@ -363,13 +311,11 @@ for i,trackingFile in enumerate(trackingList):
             biasLeftBoutS.append((np.sum(ROIangles))/(np.sum(np.abs(ROIangles))))
             ### boutSeq ###
             fullSeq=data['boutSeq']
-            if omitForward:ROISeq=AZP.angleToSeq_LR(ROIangles)
-            else:ROISeq=AZP.angleToSeq(ROIangles)
+            ROISeq=fullSeq[keep]
             boutSeqS.append(ROISeq)
-            
             ### seqProbs_1 ###
             ## N.B. dictionaries cannot be put together in this loop as if the first ROI has no bouts then comb1 and comb2 will not be defined yet
-            if len(ROISeq)>5: 
+            if len(ROISeq)>6: 
                 comb1,v1=AZP.probSeq1(ROISeq)
                 comb2,_,v2,z,p=AZP.probSeq2_ROI(data['boutSeq'],ROISeq)
                 
@@ -383,20 +329,7 @@ for i,trackingFile in enumerate(trackingList):
             seqProbs2_ZS.append(z)
                 ### pvalues ###
             seqProbs2_PS.append(p)
-            ### LTurnPC ###
-            numL=0
-            numT=0
-            for k in ROISeq:
-                if k=='L':
-                    numL+=1
-                    numT+=1
-                elif k=='R':
-                    numT+=1
-
-            if numL!=0 and numT!=0:
-                LturnPCS.append((numL/numT)*100)
-            else: 
-                LturnPCS.append(-1)
+            
         else:
             ### BPS ###
             BPSS.append(0)
@@ -421,8 +354,6 @@ for i,trackingFile in enumerate(trackingList):
             avgAngVelocityBoutS.append(-1)
             ### biasLeftBout ###
             biasLeftBoutS.append(-1)
-            ### boutSeq ###
-            boutSeqS.append(-1)
             ### seqProbs1 ###
             seqProb1S.append(-1)
             ### seqProbs_2 ###
@@ -432,20 +363,90 @@ for i,trackingFile in enumerate(trackingList):
             seqProbs2_ZS.append(-1)
                 ## pvalues ##
             seqProbs2_PS.append(-1)
-            ### LTurnPC ###
-            LturnPCS.append(-1)
-            boutSeqS.append(-1)
-    ##### END OF ROI LOOP 1 #####
-    
-    seg_data=[]          
-    ##### START OF ROI LOOP 2 #####
-    for r in range(numROIs):
+        
+#        boutStarts=[]
+#        LTurnPC=[]
+#        if len(distPerFrame)>1:
+#            cumDist=AZU.accumulate(distPerFrame)
+#            avgVelocity=cumDist[-1] /(len(cumDist)/FPS)
+#            idF=AnalysisFolder+'Figures\\ROIs\\'
+#            AZU.cycleMkDir(idF)
+##            ret, RTurns,LTurns,FSwims,BPS, allBouts, allBoutsDist, allBoutsOrt, boutAngles, LturnPC,boutStarts,_,_,_ = AZS.extractBouts(bx_smm,by_smm,ort_s,distPerSec,name=name+'_ROI_' + ROINames[r], savepath=idF,plot=False)        
+#            
+#            
+#        else:
+#            cumDist=[0]
+#            avgVelocity=0
+#        
+#        if(ret==-1) or len(boutStarts)<=1: # if no or only one bout detected, set everything to -1
+#            
+##            BPSS.append(-1)
+#            avgBoutS.append(-1)
+#            avgBoutSES.append(-1)
+#            biasLeftBoutS.append(-1) 
+#            avgAngVelocityBoutS.append(-1)
+#            boutAmpsS.append(-1)
+#            boutDistS.append(-1)
+#            allBoutsS.append(-1)
+#            allBoutsOrtS.append(-1)
+#            LTurnPCS.append(-1)
+#            boutAnglesS.append(-1)
+#            boutSeqS.append(-1)
+#            distPerFrameS.append(-1)
+#            avgVelocityS.append(-1)
+#            cumDistS.append(-1)
+#            seqProbS.append(-1)
+#        else:
+#            # check bouts for silly measures
+#            amm=np.where((np.max(allBoutsDist,axis=1))>50)
+#            bmm=np.where((np.max(allBoutsDist,axis=1))<3) # exclude any that do not travel faster than 3mm/s
+#            keep=np.ones(len(boutAngles))
+#            keep[amm]=0
+#            keep[bmm]=0
+#            keep=keep>0
+##    
+#            RTurns=RTurns[keep]
+#            LTurns=LTurns[keep]
+#            FSwims=FSwims[keep]
+#            allBouts = allBouts[keep]
+#            allBoutsDist = allBoutsDist[keep]
+#            allBoutsOrt = allBoutsOrt[keep]
+#            boutAngles = boutAngles[keep]
+#            boutStarts = boutStarts[keep]
+#            BPSS.append(BPS)
+#            allBoutsS.append(allBouts)
+#            allBoutsOrtS.append(allBoutsOrt)
+#            LTurnPCS.append(LturnPC)
+#            boutAnglesS.append(boutAngles)
+#            boutSeqS.append(AZP.angleToSeq(boutAngles))
+#            if len(boutAngles)>3:
+#                comb,ss=AZP.probSeq1(boutSeqS[r])
+#            else: ss=-1
+#            seqProbS.append(ss)
+#            avgBoutS.append(np.mean(allBouts,0))
+#            avgBoutSES.append(np.std(allBouts,0)) #/np.sqrt(len(boutAngles)))
+#            biasLeftBoutS.append((np.sum(boutAngles))/(np.sum(np.abs(boutAngles)))) # positive is bias for left, negative bias for right
+#            avgAngVelocityBoutS.append(np.mean(np.abs(boutAngles)))
+#            distPerFrameS.append(distPerFrame)
+#            avgVelocityS.append(avgVelocity)
+#            cumDistS.append(cumDist)
+#            
+            # Compute bout amplitudes from all bouts peak
+#            boutAmpsS.append(AZA.findBoutMax(allBouts))
+#            OR
+            # Compute boutAmps from integral of distance travelled during that bout
+#            print('There are ' + str(len(boutStarts)) + ' bouts in this ROI')
+#            print('First bout starts at frame ' + str(boutStarts[0]))
+#            boutDistS.append(AZA.findBoutArea(allBoutsDist,FPS))
+        
+        thisMask=ROI_masks[r]
+        thisprob=seqProbS[r]
         seg_data.append({'ROIName'              :   ROINames[r],
                          'BPS'                  :   BPSS[r],
                          'avgVelocity'          :   avgVelocityS[r],
                          'avgAngVelocityBout'   :   avgAngVelocityBoutS[r],
                          'biasLeftBout'         :   biasLeftBoutS[r],
-                         'LTurnPC'              :   LturnPCS[r],
+                         'LTurnPC'              :   LTurnPCS[r],
                          'distPerFrame'         :   distPerFrameS[r],
                          'cumDist'              :   cumDistS[r],
                          'avgBout'              :   {'Mean'             :   avgBoutS[r],
@@ -455,24 +456,18 @@ for i,trackingFile in enumerate(trackingList):
                          'boutDists'            :   boutDistS[r],
                          'boutAngles'           :   boutAnglesS[r],
                          'allBouts'             :   allBoutsS[r],
-                         'allBoutsDist'         :   allBoutsDistS[r],
                          'boutOrts'             :   allBoutsOrtS[r],
-                         'ROIMask'              :   ROI_masks[r],
+                         'ROIMask'              :   thisMask,
                          'PCTimeSpent'          :   timeInROI_PC[r],            
                          'boutSeq'              :   boutSeqS[r],
-                         'seqProbs1'             :   {'comb'    :   comb1,
-                                                     'prob'     :   seqProb1S[r],
-                                                     },
-                         'seqProbs2'            :   {'comb'     :   comb2,
-                                                     'prob'     :   seqProbs2_VS[r],
-                                                     'pvalues'  :   seqProbs2_PS[r],
-                                                     'zscores'  :   seqProbs2_ZS[r],
+                         'seqProbs'             :   {'comb'  :   comb,
+                                                     'prob'  :   thisprob,
                                                      },
                          })
                          
         # save the dictionary
     dic['ROIs']= seg_data
-    outName=AnalysisFolder+name+'_ANALYSIS_ROIs' + outSuff + '.npy'
+    outName=AnalysisFolder+name+'_ANALYSIS_ROIs.npy'
     print('Saving ROI data at ' + outName)
     np.save(outName,dic)
     

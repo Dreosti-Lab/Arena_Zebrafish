@@ -70,11 +70,11 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,save
     # 9. Find crop region based on fx,fy coordinates and provided cropSize
     # 10. Crop previous_ROI, current, and background on following loops (steps 3 through 7)
     # 11. Save cropped movie
-    #maxNumFrames=432000
-    numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second), and the first 30 seconds
-    #if numFrames>maxNumFrames:numFrames=maxNumFrames
+    maxNumFrames=432000
+    numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second)
+    if numFrames>maxNumFrames:numFrames=maxNumFrames
     
-    numFrames=numFrames-startFrame
+    numFrames=(numFrames-startFrame)-100
     previous_ROI=[]
     previous_ROI.append(np.zeros((h,w),dtype = np.uint8))
 
@@ -97,12 +97,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,save
     print('Tracking')
     
     noContoursCount=0               
-    limitError=0.1
-    limitFrames=np.floor(numFrames*limitError)
+#    limitError=0.1
+#    limitFrames=np.floor(numFrames*limitError)
     for f in range(numFrames):
 #        print(f)
-#        if(f==4157):
-#            print('here')
 #        # Report Progress every 120 frames of movie
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
@@ -121,10 +119,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,save
         
         # check we haven't lost the fish (more than 10% of movie continuously)
         # return error frame and break the loop
-        if(noContoursCount>limitFrames):
-            failedAviFiles=True
-            errF=f-noContoursCount
-            break
+#        if(noContoursCount>limitFrames):
+#            failedAviFiles=True
+#            errF=f-noContoursCount
+#            break
         
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)

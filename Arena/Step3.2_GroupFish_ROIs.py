@@ -23,22 +23,22 @@ trackingFolder=[]
 
 # OR
 
-trackingFolder = r'D:\\Movies\\GroupedData\\Groups\\WT_M0\\'
+trackingFolder = r'D:\\Movies\\GroupedData\\Groups\\EC_B0\\'
 
 # Set Flags
 createGroupFigures=True
 keepGroupFigures=True
 report=True
 omitForward=False
-anSuff='WTWT_M0_200922' #suffix attached to analysis folder (if any) (suff in Step2)
-inSuff='WTWT_M0_200922' # suffix attached to individual dictionaries (if any) (outSuff in Step2.1)
+anSuff='EC_B0' #suffix attached to analysis folder (if any) (suff in Step2)
+inSuff='EC_B0' # suffix attached to individual dictionaries (if any) (outSuff in Step2.1)
 outSuff='' # suffix to be attached to group dictionary (if any)
-groupName='WTWT_M0_200922'
+groupName='EC_B0'
 FPS=120
 
 # Make Dictionary and Figure Folders and define output paths
 outPathD='D:\\Movies\\GroupedData\\Dictionaries\\'
-outPathF='D:\\Movies\\GroupedData\\Figures\\'
+outPathF='D:\\Movies\\GroupedData\\Figures_210114\\'
 ###############################################################################
 
 groupName = groupName + outSuff
@@ -52,15 +52,19 @@ ROIdictNameList=[]
 dictList=[]
 ROIdictList=[]
 
-## find dictionaries according to rtracking or file folderlist
-if(len(folderListFile)!=0 and len(trackingFolder)==0): # then we are dealing with a folderList rather than a folder of shortcuts
-    dictNameList=AZU.getDictsFromFolderList(folderListFile)    
-        
-elif(len(folderListFile)==0 and len(trackingFolder)!=0): # then we are dealing with a folder of shortcuts
-    dictNameList=AZU.getDictsFromTrackingFolderROI(trackingFolder,anSuff=anSuff,suff=inSuff)    
-        
-elif(len(folderListFile)==0 and len(trackingFolder)==0):
-            sys.exit('No tracking folder or FolderlistFile provided')
+## find dictionaries according to tracking or file folderlist
+#if(len(folderListFile)!=0 and len(trackingFolder)==0): # then we are dealing with a folderList rather than a folder of shortcuts
+#    dictNameList=AZU.getDictsFromFolderList(folderListFile)    
+#        
+#elif(len(folderListFile)==0 and len(trackingFolder)!=0): # then we are dealing with a folder of shortcuts
+#    dictNameList=AZU.getDictsFromTrackingFolderROI(trackingFolder,anSuff=anSuff,suff=inSuff)    
+#        
+#elif(len(folderListFile)==0 and len(trackingFolder)==0):
+#            sys.exit('No tracking folder or FolderlistFile provided')
+
+# Check here if te dictNameList is empty. If it is, check the Root Data folder
+#if len(dictNameList)==0:
+dictNameList=AZU.getDictsFromRootFolderROI(trackingFolder,anSuff=anSuff,suff=inSuff) 
  ########################################################################
            
 AZU.cycleMkDir(outPathD)

@@ -21,8 +21,8 @@ import BONSAI_ARK
 import timeit
 import cv2
 
-folderListFile =r'D:\Movies\FolderLists\200827.txt'
-plot = True   # set  to 1 if you want to see the tracking as it happens... this slows the code significantly
+folderListFile =r'D:\Movies\FolderLists\200313.txt'
+plot = True   # set  to true if you want to see the tracking as it happens... this slows the code significantly
 FPS = 120
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 
@@ -105,7 +105,7 @@ for idx,folder in enumerate(folderNames):
             fxS, fyS, bxS, byS, exS, eyS, areaS, ortS, motS, err,errF = AZV.arena_fish_tracking(aviFile, figureDirPath, ROIs, plot=1, cropOp=1, FPS=FPS)
         except:
             print('aviFile failed during tracking, skipping...')
-            
+            err=True
         
         toc=timeit.default_timer()
         timeNow=timeit.time.ctime()
@@ -113,7 +113,7 @@ for idx,folder in enumerate(folderNames):
         # Judge success (less than 10% of the movie were not 'No Contour' or 'Particle too small' frames)
         # Create shortcuts in seperate folders for easy access to .avis for future analysis
         if(err):
-            message=message + '. But failed on frame ' + str(errF)
+#            message=message + '. But failed on frame ' + str(errF)
             saveFailPath=d+r'\\failedAviFiles\\' + expName + '.lnk'
 #            AZU.createShortcut(aviFile,saveFailPath)
         else:

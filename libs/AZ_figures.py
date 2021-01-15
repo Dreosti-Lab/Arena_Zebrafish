@@ -17,15 +17,16 @@ import AZ_analysis as AZA
 import AZ_video as AZV
 import scipy.stats as stats
 import AZ_streakProb as AZP
+import AZ_math as AZM
 #from itertools import compress
 import cv2
 from matplotlib.lines import Line2D
-
-
+import glob
 #import rpy2.robjects.numpy2ri
 #from rpy2.robjects.packages import importr
 #Rstats = importr('stats')
-def run(g1,g2,l1,l2,keepFigures=False,save=True,recompute=False,startFrame=0,endFrame=432000,gridSize=40):
+
+def run(g1,g2,l1,l2,keepFigures=False,save=True,recompute=False,startFrame=0,endFrame=432000,gridSize=40,SO=False):
 #    g1='EmxGFP_B0_200913'
 #    g2='WT_M0_200826'
 #    l1='Blank'
@@ -40,10 +41,11 @@ def run(g1,g2,l1,l2,keepFigures=False,save=True,recompute=False,startFrame=0,end
     print('Running turn figures')
     runTurnFigs(dicList,l1,l2,keepFigures=keepFigures,save=save)
     print('Running dispersal figures')
-     =dispersalFigures(dicList,l1,l2,saveFigures=save,recomputeDispersal=recompute)
+    GroupStateProps=dispersalFigures(dicList,l1,l2,saveFigures=save,recomputeDispersal=recompute,SO=SO)
     print('Running heatmaps')
     spatialMaps(dicList,startFrame=startFrame,endFrame=endFrame,gridSize=gridSize,save=save,keepFigures=keepFigures)
-        
+    return GroupStateProps
+
 def runTurnFigs(dicList,label1,label2,keepFigures=True,save=True): # only works for 2 dictionaries in a list at present
 #    label1='1st30min'
 #    label2='2nd30min'
@@ -55,6 +57,35 @@ def runTurnFigs(dicList,label1,label2,keepFigures=True,save=True): # only works 
     LRChainAnalysis(dict1,dict2,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
     FLRBoutCompare(dict1,dict2,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
     return n1,n2
+
+def plotLoomTrajectoryFolder(trackingFolder):
+    trackingFiles=[]
+    trackingsubFiles = glob.glob(trackingFolder + r'\*.npz')
+    for s in trackingsubFiles:trackingFiles.append(s)
+    for trackingFile in trackingFiles:
+        plotLoomTrajectories(trackingFile)
+        
+def plotLoomTrajectories(trackingFile):
+    
+    fx,fy,_,_,_,_,_,heading,_=AZU.grabTrackingFromFile(trackingFile)
+    
+    loomStarts,loomEnds=AZA.findLooms(len(fx),
+                                      startTime=15,
+                                      interval=1,
+                                      duration=1,
+                                      numFrames=120,
+                                      frameRate=120)
+
+    trajX,trajY,trajHeadings,trajXOrig,trajYOrig,=AZA.extractTrajFromStim(loomStarts,loomEnds,fx,fy,heading)
+    rotTrajX,rotTrajY=AZA.rotateTrajectoriesByHeadings(trajXOrig,trajYOrig,trajHeadings)
+    
+    plt.figure()
+    for i in range(0,len(rotTrajX)):
+        plt.plot(rotTrajX[i],rotTrajY[i])
+        plt.ylim(-500,500)
+        plt.xlim(-500,500)
+        
+    return rotTrajX,rotTrajY,trajHeadings,trajX,trajY
 
 def defineStateFromDispersal(dispVec,states,colList,ExploreThreshMean=9.6,ExploreThreshSD=2.5,ExploitThreshMean=2.3,ExploitThreshSD=1.3):
 
@@ -92,8 +123,9 @@ def defineStateFromDispersal(dispVec,states,colList,ExploreThreshMean=9.6,Explor
             
     return fishState, fishCol, ExploreHighThresh
 
-def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameRate=120,saveFigures=True,saveDispersal=True,recomputeDispersal=False):
+def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=120,dispWindow=5,frameRate=120,saveFigures=True,saveDispersal=True,recomputeDispersal=False,SO=True):
     
+    DicDir='D:\\Movies\\GroupedData\\Dictionaries\\'
     # list possible states
     states=[]
     states.append('Stop')
@@ -115,6 +147,8 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameR
     for i,f in enumerate(dictList): # cycle through group dictionaries   
         print('Loading group dictionary...')
         # load dictionary and find names and numbers
+        if SO:
+            f=DicDir+f+'.npy'
         dic=np.load(f,allow_pickle=True).item()
         groupNames.append(dic['Name'])
         numFish=len(dic['Ind_fish'])
@@ -138,6 +172,8 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameR
             fx,fy,_,_,_,_,_,_,_ = AZU.grabTrackingFromFile(thisFish['info']['TrackingPath'])
             
             # measure dispersal over time (5 second window as in Marques et al Nature 2020 (Robson and Li labs)) 
+            
+            # convert to mm
             fx_mm,fy_mm=AZU.convertToMm(fx,fy)
             
             # check to see if dispVec has been done already
@@ -151,7 +187,7 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameR
                     dispVec=thisFish['data']['dispersal'][startFrame:endFrame]
             
             if (flag and recomputeDispersal) or flag==False: 
-                dispVec=AZA.measureDispersal(fx_mm,fy_mm, window=window)
+                dispVec=AZA.measureDispersal(fx_mm,fy_mm, window=dispWindow)
             
                 if saveDispersal:
                     thisFish['data']['dispersal']=dispVec
@@ -161,7 +197,7 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameR
                     
                 dispVec=dispVec[startFrame:endFrame]
                 
-            dispVec_sm=AZU.smoothSignal(dispVec,window)
+            dispVec_sm=AZM.smoothSignal(dispVec,smoothWindow)
             fx=fx[startFrame:endFrame]
             fy=fy[startFrame:endFrame]
             fx_mm=fx_mm[startFrame:endFrame]
@@ -172,8 +208,11 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,window=5,frameR
             # Compute total proportion time for this fish in different states
             thisFishProps=[]
             for thisState in states:
-                prop=np.sum(fishState_sm==thisState)
-                thisFishProps.append(np.divide(prop,len(fishState_sm)))
+                prop=[]
+                for n in fishState_sm:
+                    prop.append(n==thisState)
+                propSum=np.sum(prop)
+                thisFishProps.append(np.divide(propSum,len(fishState_sm)))
             fishStateProps.append(thisFishProps) # collect all relative times for this fish
                                 
             if saveFigures:
@@ -1168,7 +1207,7 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
     if keepFigures==False: plt.close()
     return n1,n2
     
-def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,keepFigures=False,label1='NO LABEL!',label2='NO LABEL!',col1='#486AC6',col2='#F3930C'):
+def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs_Exc',saveFigures=True,keepFigures=False,label1='NO LABEL!',label2='NO LABEL!',col1='#486AC6',col2='#F3930C',LTurnThresh=[40,60]):
     
     labelRand='Biased "coin flip"'
 #    labelCoin='Coin flip'
@@ -1195,73 +1234,122 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
             aa=np.random.permutation(pot)
             coinSeq.append(aa[0])
         cumProbS_coin.append(AZP.probStreak_L_OR_R(coinSeq))
-    avgCumProb_coin=np.mean(cumProbS_coin,axis=0)
-    seCumProb_coin=np.std(cumProbS_coin,axis=0)/np.sqrt(numIter1)
+#    avgCumProb_coin=np.mean(cumProbS_coin,axis=0)
+#    seCumProb_coin=np.std(cumProbS_coin,axis=0)/np.sqrt(numIter1)
     
-    pos_coin=avgCumProb_coin+seCumProb_coin
-    neg_coin=avgCumProb_coin-seCumProb_coin
+#    pos_coin=avgCumProb_coin+seCumProb_coin
+#    neg_coin=avgCumProb_coin-seCumProb_coin
     
+    # Exclude those with LTurn percentages above or below a threshold
+        # Loop through ind fish and grab the LTurnPCs
+    excBoo=[]
+    for i in range(num1):    
+        LTurnPC=dic1['Ind_fish'][i]['data']['LTurnPC']
+        # create a boolean array of those within thresholds
+        if LTurnPC<LTurnThresh[0]:excBoo.append(False)
+        elif LTurnPC>LTurnThresh[1]:excBoo.append(False)
+        else: excBoo.append(True)
+        
     for i in range(num1):
-        _,boutSeq_1=AZP.angleToSeq_LR(dic1['PooledData']['boutAngles'][i])
+        if excBoo[i]:
+            _,boutSeq_1=AZP.angleToSeq_LR(dic1['PooledData']['boutAngles'][i])
+            # create random sequences to generate biased 'coin flip' probabilities for this fish        
+            randProbS_1=[]
 
-        # create random sequences to generate biased 'coin flip' probabilities for this fish        
-        randProbS_1=[]
-
-        for j in range(numIter):
-        # shuffle the sequence randomly
-            randBoo_1=np.random.permutation(boutSeq_1)
-            randProbS_1.append(AZP.probStreak_L_OR_R(randBoo_1))
-        # take mean for biased coin flip curve - add to list
-        rP=np.mean(randProbS_1,axis=0)
-        cumProbS_rand1.append(rP)
-        # find real curve for this fish - add to list
-        cP=AZP.probStreak_L_OR_R(boutSeq_1)
-        cumProbS_1.append(cP)
-        # comput difference between biased coin flip curve and real curve - add to list
-        biasedCoinFlipDiff_1.append(np.subtract(rP,cP))    
+            for j in range(numIter):
+                # shuffle the sequence randomly
+                randBoo_1=np.random.permutation(boutSeq_1)
+                randProbS_1.append(AZP.probStreak_L_OR_R(randBoo_1))
+                
+            # take mean for biased coin flip curve - add to list
+            rP=np.mean(randProbS_1,axis=0)
+            cumProbS_rand1.append(rP)
+            # find real curve for this fish - add to list
+            cP=AZP.probStreak_L_OR_R(boutSeq_1)
+            cumProbS_1.append(cP)
+            # comput difference between biased coin flip curve and real curve - add to list
+            biasedCoinFlipDiff_1.append(np.subtract(rP,cP))    
+    
+    # Exclude those with LTurn percentages above or below a threshold
+        # Loop through ind fish and grab the LTurnPCs
+    excBoo=[]
+    for i in range(num2):    
+        LTurnPC=dic2['Ind_fish'][i]['data']['LTurnPC']
+        # create a boolean array of those within thresholds
+        if LTurnPC<LTurnThresh[0]:excBoo.append(False)
+        elif LTurnPC>LTurnThresh[1]:excBoo.append(False)
+        else: excBoo.append(True)
         
     for i in range(num2):
-        _,boutSeq_2=AZP.angleToSeq_LR(dic2['PooledData']['boutAngles'][i])    
-        randProbS_2=[]
-        for j in range(numIter):
-            randBoo_2=np.random.permutation(boutSeq_2)
-            randProbS_2.append(AZP.probStreak_L_OR_R(randBoo_2))
+        if excBoo[i]:
+            _,boutSeq_2=AZP.angleToSeq_LR(dic2['PooledData']['boutAngles'][i])    
+            randProbS_2=[]
+            for j in range(numIter):
+                randBoo_2=np.random.permutation(boutSeq_2)
+                randProbS_2.append(AZP.probStreak_L_OR_R(randBoo_2))
         
-        rP=np.mean(randProbS_2,axis=0)
-        cumProbS_rand2.append(rP)
-        cP=AZP.probStreak_L_OR_R(boutSeq_2)
-        cumProbS_2.append(cP)
-        biasedCoinFlipDiff_2.append(np.subtract(rP,cP))
+            rP=np.mean(randProbS_2,axis=0)
+            cumProbS_rand2.append(rP)
+            cP=AZP.probStreak_L_OR_R(boutSeq_2)
+            cumProbS_2.append(cP)
+            biasedCoinFlipDiff_2.append(np.subtract(rP,cP))
     
     avgBiasedCoinFlipDiff_1=np.mean(biasedCoinFlipDiff_1,axis=0)
     avgBiasedCoinFlipDiff_2=np.mean(biasedCoinFlipDiff_2,axis=0)
-    seBiasedCoinFlipDiff_1=np.std(biasedCoinFlipDiff_1,axis=0)/np.sqrt(num1)
-    seBiasedCoinFlipDiff_2=np.std(biasedCoinFlipDiff_2,axis=0)/np.sqrt(num2)
-    negDiff1=avgBiasedCoinFlipDiff_1-seBiasedCoinFlipDiff_1
-    posDiff1=avgBiasedCoinFlipDiff_1+seBiasedCoinFlipDiff_1
-    negDiff2=avgBiasedCoinFlipDiff_2-seBiasedCoinFlipDiff_2
-    posDiff2=avgBiasedCoinFlipDiff_2+seBiasedCoinFlipDiff_2
+    sdBiasedCoinFlipDiff_1=np.std(biasedCoinFlipDiff_1,axis=0)
+    sdBiasedCoinFlipDiff_2=np.std(biasedCoinFlipDiff_2,axis=0)
+    seBiasedCoinFlipDiff_1=sdBiasedCoinFlipDiff_1/np.sqrt(num1)
+    seBiasedCoinFlipDiff_2=sdBiasedCoinFlipDiff_2/np.sqrt(num2)
+    
+    # +- SE lines Coinflip
+    negDiffsd1=avgBiasedCoinFlipDiff_1-sdBiasedCoinFlipDiff_1
+    posDiffsd1=avgBiasedCoinFlipDiff_1+sdBiasedCoinFlipDiff_1
+    negDiffsd2=avgBiasedCoinFlipDiff_2-sdBiasedCoinFlipDiff_2
+    posDiffsd2=avgBiasedCoinFlipDiff_2+sdBiasedCoinFlipDiff_2
+    
+    # +- SD lines Coinflip
+    negDiffse1=avgBiasedCoinFlipDiff_1-seBiasedCoinFlipDiff_1
+    posDiffse1=avgBiasedCoinFlipDiff_1+seBiasedCoinFlipDiff_1
+    negDiffse2=avgBiasedCoinFlipDiff_2-seBiasedCoinFlipDiff_2
+    posDiffse2=avgBiasedCoinFlipDiff_2+seBiasedCoinFlipDiff_2
     
     avgCumProb_rand1=np.mean(cumProbS_rand1,axis=0)
     avgCumProb_rand2=np.mean(cumProbS_rand2,axis=0)
-    seCumProb_rand1=np.std(cumProbS_rand1,axis=0)/np.sqrt(num1)
-    seCumProb_rand2=np.std(cumProbS_rand2,axis=0)/np.sqrt(num2)
+    sdCumProb_rand1=np.std(cumProbS_rand1,axis=0)
+    sdCumProb_rand2=np.std(cumProbS_rand2,axis=0)
+    seCumProb_rand1=sdCumProb_rand1/np.sqrt(num1)
+    seCumProb_rand2=sdCumProb_rand2/np.sqrt(num2)
     
-    pos_rand1=avgCumProb_rand1+seCumProb_rand1
-    neg_rand1=avgCumProb_rand1-seCumProb_rand1
-    pos_rand2=avgCumProb_rand2+seCumProb_rand2
-    neg_rand2=avgCumProb_rand2-seCumProb_rand2
+    # +- SD lines randomised 1 and 2
+    pos_randsd1=avgCumProb_rand1+sdCumProb_rand1
+    neg_randsd1=avgCumProb_rand1-sdCumProb_rand1
+    pos_randsd2=avgCumProb_rand2+sdCumProb_rand2
+    neg_randsd2=avgCumProb_rand2-sdCumProb_rand2
+    
+    # +- SE lines randomised 1 and 2
+    pos_randse1=avgCumProb_rand1+seCumProb_rand1
+    neg_randse1=avgCumProb_rand1-seCumProb_rand1
+    pos_randse2=avgCumProb_rand2+seCumProb_rand2
+    neg_randse2=avgCumProb_rand2-seCumProb_rand2
     
     avgCumProb_1=np.mean(cumProbS_1,axis=0)
     avgCumProb_2=np.mean(cumProbS_2,axis=0)
-    seCumProb_1=np.std(cumProbS_1,axis=0)/np.sqrt(num1)
-    seCumProb_2=np.std(cumProbS_2,axis=0)/np.sqrt(num2)
+    sdCumProb_1=np.std(cumProbS_1,axis=0)
+    sdCumProb_2=np.std(cumProbS_2,axis=0)
+    seCumProb_1=sdCumProb_1/np.sqrt(num1)
+    seCumProb_2=sdCumProb_2/np.sqrt(num2)
     
-    pos1=avgCumProb_1+seCumProb_1
-    neg1=avgCumProb_1-seCumProb_1
+    # +- SE lines for 1 and 2
+    posse1=avgCumProb_1+seCumProb_1
+    negse1=avgCumProb_1-seCumProb_1
+    posse2=avgCumProb_2+seCumProb_2
+    negse2=avgCumProb_2-seCumProb_2
     
-    pos2=avgCumProb_2+seCumProb_2
-    neg2=avgCumProb_2-seCumProb_2
+    # +- SD lines for 1 and 2
+    possd1=avgCumProb_1+sdCumProb_1
+    negsd1=avgCumProb_1-sdCumProb_1
+    possd2=avgCumProb_2+sdCumProb_2
+    negsd2=avgCumProb_2-sdCumProb_2
     
     x1=range(0,len(avgCumProb_rand1))
     x2=range(0,len(avgCumProb_rand2))
@@ -1269,18 +1357,20 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
         x=x1
     else: x=x2
     
-    figName='streakLengthCumProb_DIFF' + name1 + '_vs_' + name2 
+    ## Plot residual average cumulative probability and SD
+    ## this plot shows the residual of the two groups we are comparing and the coinflip
+    figName='streakLengthCumProb_DIFF' + name1 + '_vs_' + name2 + '_SD'
     plt.figure(figName,constrained_layout=True)
     
     plt.plot(avgBiasedCoinFlipDiff_1,label=label1,color=col1,linewidth=2)
-    plt.plot(negDiff1,color=col1,linewidth=0.5,alpha=0.7)
-    plt.plot(posDiff1,color=col1,linewidth=0.5,alpha=0.7)
-    plt.fill_between(x,negDiff1,posDiff1,color=col1,alpha=0.2)
+    plt.plot(negDiffsd1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.plot(posDiffsd1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negDiffsd1,posDiffsd1,color=col1,alpha=0.2)
     
     plt.plot(avgBiasedCoinFlipDiff_2,label=label2,color=col2,linewidth=2)
-    plt.plot(negDiff2,color=col2,linewidth=0.5,alpha=0.7)
-    plt.plot(posDiff2,color=col2,linewidth=0.5,alpha=0.7)
-    plt.fill_between(x,negDiff2,posDiff2,color=col2,alpha=0.2)
+    plt.plot(negDiffsd2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.plot(posDiffsd2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negDiffsd2,posDiffsd2,color=col2,alpha=0.2)
     
     ax=plt.gca()
     ax.spines['top'].set_visible(False)
@@ -1308,20 +1398,63 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
     if keepFigures==False:
         plt.close()
         
-        
+        ## Plot residual average cumulative probability and SE
+    ## this plot shows the residual of the two groups we are comparing and the coinflip
+    figName='streakLengthCumProb_DIFF' + name1 + '_vs_' + name2 + '_SE'
+    plt.figure(figName,constrained_layout=True)
     
-    figName='streakLengthCumProb_' + name1 + '_vs_' + name2 
+    plt.plot(avgBiasedCoinFlipDiff_1,label=label1,color=col1,linewidth=2)
+    plt.plot(negDiffse1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.plot(posDiffse1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negDiffse1,posDiffse1,color=col1,alpha=0.2)
+    
+    plt.plot(avgBiasedCoinFlipDiff_2,label=label2,color=col2,linewidth=2)
+    plt.plot(negDiffse2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.plot(posDiffse2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negDiffse2,posDiffse2,color=col2,alpha=0.2)
+    
+    ax=plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['left'].set_linewidth(2)
+    ax.xaxis.set_tick_params(width=2,length=6)
+    ax.yaxis.set_tick_params(width=2,length=6)
+    
+    xint=(0,5,10,15)
+    plt.xticks(xint,xint,fontsize=18)
+    yint=(0,0.1,0.2,0.3)
+    plt.yticks(yint,yint,fontsize=18)
+    
+    plt.xlabel('Streak Length (bouts)',fontsize=22,labelpad=8)
+    plt.ylabel('Residual probability',fontsize=22,labelpad=8)
+    plt.legend(fontsize=18,handlelength=1,framealpha=0)
+    
+    
+    if saveFigures:
+        AZU.cycleMkDir(savepath)
+        saveName=savepath+'\\'+figName+'.png'
+        plt.savefig(saveName,dpi=600)
+        
+    if keepFigures==False:
+        plt.close()
+    
+    ## Plot group average cumulative probability and SE
+    ## The curve represents the 'streakiness' of the group or individual fish, displayed as the pcumulative probabiity of a random bout belonging to a streak of length x
+    figName='streakLengthCumProb_' + name1 + '_vs_' + name2 + '_SE'
     plt.figure(figName,constrained_layout=True)
     
     plt.plot(avgCumProb_rand1,label=labelRand,color='black',linewidth=2)
-    plt.plot(neg_rand1,color='black',linewidth=0.5,alpha=0.35)
-    plt.plot(pos_rand1,color='black',linewidth=0.5,alpha=0.35)
-    plt.fill_between(x1,neg_rand1,pos_rand1,color='black',alpha=0.1)
+    plt.plot(neg_randse1,color='black',linewidth=0.5,alpha=0.35)
+    plt.plot(pos_randse1,color='black',linewidth=0.5,alpha=0.35)
+    plt.fill_between(x1,neg_randse1,pos_randse1,color='black',alpha=0.1)
     
     plt.plot(avgCumProb_rand2,color='black',linewidth=2)
-    plt.plot(neg_rand2,color='black',linewidth=0.5,alpha=0.35)
-    plt.plot(pos_rand2,color='black',linewidth=0.5,alpha=0.35)
-    plt.fill_between(x2,neg_rand2,pos_rand2,color='black',alpha=0.1)
+    plt.plot(neg_randse2,color='black',linewidth=0.5,alpha=0.35)
+    plt.plot(pos_randse2,color='black',linewidth=0.5,alpha=0.35)
+    plt.fill_between(x2,neg_randse2,pos_randse2,color='black',alpha=0.1)
+    
+    ##
     
 #    plt.plot(avgCumProb_coin,label=labelCoin,color='#0f1b8a',linewidth=2)
 #    plt.plot(neg_coin,color='#0f1b8a',linewidth=0.5,alpha=0.7)
@@ -1329,14 +1462,14 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
 #    plt.fill_between(x2,neg_coin,pos_coin,color='#0f1b8a',alpha=0.2)
     
     plt.plot(avgCumProb_1,label=label1,color=col1,linewidth=2)
-    plt.plot(neg1,color=col1,linewidth=0.5,alpha=0.7)
-    plt.plot(pos1,color=col1,linewidth=0.5,alpha=0.7)
-    plt.fill_between(x,neg1,pos1,color=col1,alpha=0.2)
+    plt.plot(negse1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.plot(posse1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negse1,posse1,color=col1,alpha=0.2)
     
     plt.plot(avgCumProb_2,label=label2,color=col2,linewidth=2)
-    plt.plot(neg2,color=col2,linewidth=0.5,alpha=0.7)
-    plt.plot(pos2,color=col2,linewidth=0.5,alpha=0.7)
-    plt.fill_between(x,neg2,pos2,color=col2,alpha=0.2)
+    plt.plot(negse2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.plot(posse2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negse2,posse2,color=col2,alpha=0.2)
     ax=plt.gca()
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1351,8 +1484,61 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
     plt.xlabel('Streak Length',fontsize=22)
     plt.ylabel('Cumulative Probability',fontsize=22)
 #    plt.title('Cumulative histogram of streak lengths')
-    plt.plot(avgCumProb_1)
-    plt.plot(np.mean(cumProbS_2,axis=0))
+    plt.legend(fontsize=18,framealpha=0)
+    
+    if saveFigures:
+        AZU.cycleMkDir(savepath)
+        saveName=savepath+'\\'+figName+'.png'
+        plt.savefig(saveName,dpi=600)
+        
+    if keepFigures==False:
+        plt.close()
+        
+    ## Plot group average cumulative probability and SD
+    ## The curve represents the 'streakiness' of the group or individual fish, displayed as the pcumulative probabiity of a random bout belonging to a streak of length x
+    figName='streakLengthCumProb_' + name1 + '_vs_' + name2 + '_SD'
+    plt.figure(figName,constrained_layout=True)
+    
+    plt.plot(avgCumProb_rand1,label=labelRand,color='black',linewidth=2)
+    plt.plot(neg_randsd1,color='black',linewidth=0.5,alpha=0.35)
+    plt.plot(pos_randsd1,color='black',linewidth=0.5,alpha=0.35)
+    plt.fill_between(x1,neg_randsd1,pos_randsd1,color='black',alpha=0.1)
+    
+    plt.plot(avgCumProb_rand2,color='black',linewidth=2)
+    plt.plot(neg_randsd2,color='black',linewidth=0.5,alpha=0.35)
+    plt.plot(pos_randsd2,color='black',linewidth=0.5,alpha=0.35)
+    plt.fill_between(x2,neg_randsd2,pos_randsd2,color='black',alpha=0.1)
+    
+    ##
+    
+#    plt.plot(avgCumProb_coin,label=labelCoin,color='#0f1b8a',linewidth=2)
+#    plt.plot(neg_coin,color='#0f1b8a',linewidth=0.5,alpha=0.7)
+#    plt.plot(pos_coin,color='#0f1b8a',linewidth=0.5,alpha=0.7)
+#    plt.fill_between(x2,neg_coin,pos_coin,color='#0f1b8a',alpha=0.2)
+    
+    plt.plot(avgCumProb_1,label=label1,color=col1,linewidth=2)
+    plt.plot(negsd1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.plot(possd1,color=col1,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negsd1,possd1,color=col1,alpha=0.2)
+    
+    plt.plot(avgCumProb_2,label=label2,color=col2,linewidth=2)
+    plt.plot(negsd2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.plot(possd2,color=col2,linewidth=0.5,alpha=0.7)
+    plt.fill_between(x,negsd2,possd2,color=col2,alpha=0.2)
+    ax=plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['left'].set_linewidth(2)
+    ax.xaxis.set_tick_params(width=2,length=6)
+    ax.yaxis.set_tick_params(width=2,length=6)
+    xint=(0,5,10,15)
+    plt.xticks(xint,xint,fontsize=18)
+    yint=(0,0.2,0.4,0.6,0.8,1.0)
+    plt.yticks(yint,yint,fontsize=18)
+    plt.xlabel('Streak Length',fontsize=22)
+    plt.ylabel('Cumulative Probability',fontsize=22)
+#    plt.title('Cumulative histogram of streak lengths')
     plt.legend(fontsize=18,framealpha=0)
     
     if saveFigures:
@@ -1363,7 +1549,66 @@ def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs',saveFigures=True,k
     if keepFigures==False:
         plt.close()
     
-    
+    ## Plot individual curves for 1 with mean on top
+    figName='AllStreakCurves_' + name1
+    plt.figure(figName,constrained_layout=True)
+    for curve in cumProbS_1:
+        plt.plot(curve,label='',color=col1,linewidth=2,alpha=0.5)
+    plt.plot(avgCumProb_1,label=label1,color=col1,linewidth=2.5)
+    ax=plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['left'].set_linewidth(2)
+    ax.xaxis.set_tick_params(width=2,length=6)
+    ax.yaxis.set_tick_params(width=2,length=6)
+    xint=(0,5,10,15)
+    plt.xticks(xint,xint,fontsize=18)
+    yint=(0,0.2,0.4,0.6,0.8,1.0)
+    plt.yticks(yint,yint,fontsize=18)
+    plt.xlabel('Streak Length',fontsize=22)
+    plt.ylabel('Cumulative Probability',fontsize=22)
+    plt.legend(fontsize=18,framealpha=0)
+    if saveFigures:
+        AZU.cycleMkDir(savepath)
+        saveName=savepath+'\\'+figName+'.png'
+        plt.savefig(saveName,dpi=600)
+        
+    if keepFigures==False:
+        plt.close()
+        
+    ## Plot individual curves for 2 with mean on top
+    figName='AllStreakCurves_' + name2
+    plt.figure(figName,constrained_layout=True)
+    for curve in cumProbS_2:
+        plt.plot(curve,label='',color=col2,linewidth=2,alpha=0.5)
+    plt.plot(avgCumProb_2,label=label2,color=col2,linewidth=2.5)
+    ax=plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['left'].set_linewidth(2)
+    ax.xaxis.set_tick_params(width=2,length=6)
+    ax.yaxis.set_tick_params(width=2,length=6)
+    xint=(0,5,10,15)
+    plt.xticks(xint,xint,fontsize=18)
+    yint=(0,0.2,0.4,0.6,0.8,1.0)
+    plt.yticks(yint,yint,fontsize=18)
+    plt.xlabel('Streak Length',fontsize=22)
+    plt.ylabel('Cumulative Probability',fontsize=22)
+    plt.legend(fontsize=18,framealpha=0)
+    if saveFigures:
+        AZU.cycleMkDir(savepath)
+        saveName=savepath+'\\'+figName+'.png'
+        plt.savefig(saveName,dpi=600)
+        
+    if keepFigures==False:
+        plt.close()
+
+    cumProbse_1=posse1-avgCumProb_1
+    cumProbse_2=posse2-avgCumProb_2
+    return avgCumProb_1,cumProbse_1,avgCumProb_2,cumProbse_2,avgCumProb_rand1
+ 
 def FLRBoutCompare(dic1,dic2,savepath=r'D:\\Shelf\\',plotInd=True,keepFigures=False, saveFigures=True,label1='NO LABEL!',label2='NO LABEL!',col1='#486AC6',col2='#F3930C'):
     
     name1=dic1['Name']

@@ -27,11 +27,110 @@ import AZ_utilities as AZU
 import scipy.ndimage as ndimage
 from scipy.optimize import curve_fit
 import AZ_math as AZM
-import cv2 as cv2
+import cv2
+#Finish later: extract each loom bout's movie... can use the same script to 
+#def extractMoviesFromStim(aviFile,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
+#    startFrame=startTime*60*120
+#    intervalFrames=interval*60*frameRate
+#    durationFrames=duration*frameRate
+#    firstLoomStart=startFrame+intervalFrames-durationFrames
+#    loomStarts=[]
+#    loomEnds=[]
+#    loomStarts.append(firstLoomStart)
+#    loomEnds.append(firstLoomStart+numFrames-1)
+#    
+#    vid=cv2.VideoCapture(aviFile)
+#    
+#    for i,start in loomStarts:
+#        end=loomEnds[i]
 
+#  rotate all points in a list of trajectories (x and y seperately) by the initial heading
+def rotateTrajectoriesByHeadings(trajectoriesX,trajectoriesY,trajectoriesHeadings):
+    
+    rotTrajectoriesX=[]
+    rotTrajectoriesY=[]
+    
+    numTraj=len(trajectoriesX)
+    for i in range(0,numTraj):
+        trajX=trajectoriesX[i]
+        trajY=trajectoriesY[i]
+        trajHeading=trajectoriesHeadings[i]
+        lenTraj=len(trajX)
+        rotTrajX=[]
+        rotTrajY=[]
+        
+        for j in range(0,lenTraj):
+            qx,qy=AZM.rotatePointAboutOrigin(trajX[j],trajY[j],trajHeading)
+            rotTrajX.append(qx*-1)
+            rotTrajY.append(qy*-1)
+            
+        rotTrajectoriesX.append(rotTrajX)
+        rotTrajectoriesY.append(rotTrajY)
+        
+    return rotTrajectoriesX,rotTrajectoriesY
+
+# extracts trajectories from tracking data according to stimulus protocol
+def extractTrajFromStim(loomStarts,loomEnds,fx,fy,heading):
+    
+    trajectoriesHeadings=[]
+    trajectoriesX=[]
+    trajectoriesY=[]
+    txx=[]
+    tyy=[]
+    
+    for i,start in enumerate(loomStarts):
+        end=loomEnds[i]
+        tx=fx[start:end]
+        txx.append(tx)
+        trajX=list(map((lambda x: x - fx[start]), tx)) # subtract the starting x from this trajectory
+        trajectoriesX.append(trajX)    
+        
+        ty=fy[start:end]
+        tyy.append(ty)
+        trajY=list(map((lambda x: x - fy[start]), ty)) # subtract the starting y from this trajectory
+        trajectoriesY.append(trajY)
+        
+        trajectoriesHeadings.append(heading[start])
+        
+    
+    return txx,tyy,trajectoriesHeadings,trajectoriesX,trajectoriesY
+
+# Finds loom start and end positions in frames from input stimulus protocol parameters
+# startTime in minutes, length of adaptation
+# interval in minutes, time between looms
+# duration in seconds, duration of stim (since stimulus ENDS on the marker time, so starts marker-duration)
+# movieLengthFr is length of full movie in frames including adaptation 
+# numFrames is the number of frames to extract for trajectory analysis
+# frameRate is camera frame rate in Hz
+# returns lists of loomStart and end positions frame positions
+    
+def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
+    
+    startFrame=startTime*60*120
+    intervalFrames=interval*60*frameRate
+    durationFrames=duration*frameRate
+    firstLoomStart=startFrame+intervalFrames-durationFrames
+    loomStarts=[]
+    loomEnds=[]
+    loomStarts.append(firstLoomStart)
+    loomEnds.append(firstLoomStart+numFrames-1)
+    
+    numLooms=np.int(np.floor((movieLengthFr-startFrame)/intervalFrames))
+    for i in range(1,numLooms):
+        loomStarts.append(loomStarts[i-1]+intervalFrames)
+        loomEnds.append(loomEnds[i-1]+intervalFrames)
+        if loomEnds[i]>movieLengthFr:
+            loomStarts[i]='xxx'
+            loomEnds[i]='xxx'
+            loomStarts.remove('xxx')
+            loomEnds.remove('xxx')
+            break
+    
+    
+    return loomStarts,loomEnds
+    
 ## Dispersal analysis: take trajectory in 5 second windows and find the smallest circle that encompasses that trajectory. 
 ## Needs only fx, fy and framerate
-
 def measureDispersal(xPos,yPos,frameRate=120,window=5):
     print('Measuring dispersal...')
     winFr=np.int(np.floor(window*frameRate))
@@ -298,7 +397,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
     print('start thresh is ' + str(startThreshold))
     stopThreshold = popt[2]
     print('stop thresh is' + str(stopThreshold))
-    smooth=AZU.smoothSignal(dM,5)
+    smooth=AZM.smoothSignal(dM,5)
     for i, m in enumerate(smooth):
         br=0
         if(moving == 0):
@@ -311,10 +410,11 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
         else:
             if np.abs(m)<stopThreshold and i>ii+40:
                 for k in range(i,i+5):
-                    if np.abs(dM[k]) > stopThreshold:
-                        break
-                    else:
-                        moving = 0
+                    if k < len(smooth):
+                        if np.abs(dM[k]) > stopThreshold:
+                            break
+                        else:
+                            moving = 0
     
     # Extract all bouts (ignore last and or first, if clipped)
     boutStarts = np.array(boutStarts)
@@ -341,7 +441,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
     # threshold on maximum
 #    keep = np.zeros(len(boutStarts))
 #    for i,b in enumerate(boutStarts):
-#        mm=np.max(AZU.smoothSignal(motion_signal[b-preWindow:b+postWindow],5))>1.2
+#        mm=np.max(AZM.smoothSignal(motion_signal[b-preWindow:b+postWindow],5))>1.2
 #        if mm: keep[i]=1
 #    keep=keep!=0
 #    boutStarts=boutStarts[keep]
@@ -385,10 +485,10 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
     LturnPC=(np.sum(Lturns)/(np.sum(Lturns)+np.sum(Rturns)))*100
     
     if plot:
-        plt.figure('Bout finder Analysis First min')
+        plt.figure('Bout finder Analysis First 30 seconds')
         xFr=range(len(motion_signal))
         x=np.divide(xFr,FPS)
-        ef=FPS*1*60
+        ef=FPS*1*30
         plt.plot(x[:ef],motion_signal[:ef])
         boutStartMarker=np.zeros(len(motion_signal[:ef]))
         boutMarker=np.zeros(len(motion_signal[:ef]))
