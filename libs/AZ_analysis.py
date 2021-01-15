@@ -95,6 +95,20 @@ def extractTrajFromStim(loomStarts,loomEnds,fx,fy,heading):
     
     return txx,tyy,trajectoriesHeadings,trajectoriesX,trajectoriesY
 
+
+
+def extractVecFromStim(loomStarts,loomEnds,vecIn):
+# segments and extracts any vector according to stimulus protocol
+    
+    matOut=[]
+    
+    for i,start in enumerate(loomStarts):
+        end=loomEnds[i]
+        matOut.append(vecIn[start:end])
+    
+    return matOut
+
+def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
 # Finds loom start and end positions in frames from input stimulus protocol parameters
 # startTime in minutes, length of adaptation
 # interval in minutes, time between looms
@@ -102,10 +116,7 @@ def extractTrajFromStim(loomStarts,loomEnds,fx,fy,heading):
 # movieLengthFr is length of full movie in frames including adaptation 
 # numFrames is the number of frames to extract for trajectory analysis
 # frameRate is camera frame rate in Hz
-# returns lists of loomStart and end positions frame positions
-    
-def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
-    
+# returns lists of loomStart and end positions frame positions    
     startFrame=startTime*60*120
     intervalFrames=interval*60*frameRate
     durationFrames=duration*frameRate
