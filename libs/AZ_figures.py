@@ -26,36 +26,39 @@ import glob
 #from rpy2.robjects.packages import importr
 #Rstats = importr('stats')
 
-def run(g1,g2,l1,l2,keepFigures=False,save=True,recompute=False,startFrame=0,endFrame=432000,gridSize=40,SO=False):
+def run(g1,g2,l1,l2,savepath=r'D:\\Shelf\\',keepFigures=False,save=True,recompute=False,startFrame=0,endFrame=432000,gridSize=40,SO=False,dicFolder=r'D:\Analysis\GroupedData\Dictionaries\\'):
+    
+    savepath=savepath+r'\\Figures\\'
 #    g1='EmxGFP_B0_200913'
 #    g2='WT_M0_200826'
 #    l1='Blank'
 #    l2='Maze'
 #    save=True
-    dicFolder=r'D:\\Movies\\GroupedData\\Dictionaries\\'
     dic1File=dicFolder+g1 +'.npy'
     dic2File=dicFolder+g2+'.npy'
     dicList=[]
     dicList.append(dic1File)
     dicList.append(dic2File)
     print('Running turn figures')
-    runTurnFigs(dicList,l1,l2,keepFigures=keepFigures,save=save)
+    runTurnFigs(dicList,l1,l2,savepath=savepath,keepFigures=keepFigures,save=save)
     print('Running dispersal figures')
-    GroupStateProps=dispersalFigures(dicList,l1,l2,saveFigures=save,recomputeDispersal=recompute,SO=SO)
+    GroupStateProps=dispersalFigures(dicList,l1,l2,savepath=savepath,saveFigures=save,recomputeDispersal=recompute,SO=SO,dicFolder=dicFolder)
     print('Running heatmaps')
-    spatialMaps(dicList,startFrame=startFrame,endFrame=endFrame,gridSize=gridSize,save=save,keepFigures=keepFigures)
+    spatialMaps(dicList,savepath=savepath,startFrame=startFrame,endFrame=endFrame,gridSize=gridSize,save=save,keepFigures=keepFigures)
     return GroupStateProps
 
-def runTurnFigs(dicList,label1,label2,keepFigures=True,save=True): # only works for 2 dictionaries in a list at present
+def runTurnFigs(dicList,label1,label2,savepath=r'D:\\Shelf\\',keepFigures=True,save=True): # only works for 2 dictionaries in a list at present
 #    label1='1st30min'
 #    label2='2nd30min'
+    savepath=savepath+r'\\TurnFigs\\'
+    AZU.cycleMkDir(savepath)
     dic1=dicList[0]
     dic2=dicList[1]
     dict1=np.load(dic1,allow_pickle=True).item()
     dict2=np.load(dic2,allow_pickle=True).item()
-    n1,n2=turnTriggeredAngleHist(dict1,dict2,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
-    LRChainAnalysis(dict1,dict2,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
-    FLRBoutCompare(dict1,dict2,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
+    n1,n2=turnTriggeredAngleHist(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
+    LRChainAnalysis(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
+    FLRBoutCompare(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
     return n1,n2
 
 def plotLoomTrajectoryFolder(trackingFolder):
@@ -123,9 +126,9 @@ def defineStateFromDispersal(dispVec,states,colList,ExploreThreshMean=9.6,Explor
             
     return fishState, fishCol, ExploreHighThresh
 
-def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=120,dispWindow=5,frameRate=120,saveFigures=True,saveDispersal=True,recomputeDispersal=False,SO=True):
+def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Templates\\',startFrame=0,endFrame=432000,smoothWindow=120,dispWindow=5,frameRate=120,saveFigures=True,saveDispersal=True,recomputeDispersal=False,SO=True,dicFolder='D:\\Analysis\\GroupedData\\Dictionaries\\'):
     
-    DicDir='D:\\Movies\\GroupedData\\Dictionaries\\'
+    savepath=savepath+r'\\DispersalFigs\\'
     # list possible states
     states=[]
     states.append('Stop')
@@ -141,32 +144,34 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
     colList.append('Magenta')
     
     groupNames=[]
-    GroupStateProps=[] # to store relative time proportion in each state for each group
-    
+    GroupStatePropsS=[] # to store relative time proportion in each state for each group
+    meanDispS=[]
+    SDDispS=[]
     # cycle through dictionaries
     for i,f in enumerate(dictList): # cycle through group dictionaries   
         print('Loading group dictionary...')
         # load dictionary and find names and numbers
         if SO:
-            f=DicDir+f+'.npy'
+            f=dicFolder+f+'.npy'
+            
         dic=np.load(f,allow_pickle=True).item()
         groupNames.append(dic['Name'])
         numFish=len(dic['Ind_fish'])
+        GroupStateProps=[]
         fishStateProps=[]
+        meanDisp=[]
+        SDDisp=[]
         # cycle through fish
         for j in range(numFish): # cycle through individual fish 
             # find fish
             thisFish=dic['Ind_fish'][j]
             fishname=thisFish['info']['AviPath']
+            fishname=fishname[4:-4]
             print('Loaded individual fish ' + fishname)
             # find avi
-            vid=cv2.VideoCapture(fishname)
-            w = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))# find width and height
-            hack=[[0,0,w,h]]
-            hack=np.asarray(hack)
-            img = AZV.compute_initial_background(vid, hack) # grab background to use as canvas
-            vid.release()
+            fishname=glob.glob(templateDir+r'\\'+fishname+'*.avi')
+            fishname=fishname[0]
+            img=AZU.grabFrame(fishname,0)
             
             # find tracking
             fx,fy,_,_,_,_,_,_,_ = AZU.grabTrackingFromFile(thisFish['info']['TrackingPath'])
@@ -259,7 +264,7 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
                 plt.legend(handles=[p0,p1,p2,p3],bbox_to_anchor=(1.05, 1))
                 saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
-                plt.scatter(fx[144001:-1],fy[144001:-1],c=fishCol[144001:-1],s=1.5)
+                plt.scatter(fx[144001:-1],fy[144001:-1],c=fishCol[144001:-1],s=1)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
@@ -279,12 +284,14 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
                 plt.figure(figName)
                 xx=range(144000)
                 xx=np.divide(xx,frameRate)
+                xx=np.divide(xx,60)
                 dispVecA=dispVec
-                dispVecA[dispVec>30]=30
+                dispVecA[dispVec>25]=25
                 plt.scatter(xx,dispVecA[0:144000],c=fishCol[0:144000],s=1)
-                plt.xlabel('Time (s)')
-                plt.ylabel('Dispersal (mm) (lim to 30mm)')
-                plt.ylim(0,30)
+                plt.xticks(ticks=np.linspace(0,20,num=21))
+                plt.xlabel('Time (mins)')
+                plt.ylabel('Dispersal (mm) (lim to 25mm)')
+                plt.ylim(0,25)
                 plt.legend(handles=[p0,p1,p2,p3],bbox_to_anchor=(1.05, 1))
                 saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
@@ -301,9 +308,10 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
                 plt.figure(figName)
                 xx=range(len(fx))
                 xx=np.divide(xx,frameRate)
+                xx=np.divide(xx,60)
                 plt.scatter(xx,dispVecA,c=fishCol,s=1)
-                plt.xlabel('Time (s)')
-                plt.ylabel('Dispersal (mm) (lim to 30mm)')
+                plt.xlabel('Time (mins)')
+                plt.ylabel('Dispersal (mm) (lim to 25mm)')
                 plt.ylim(0,30)
                 saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
@@ -320,10 +328,11 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
                 plt.figure(figName)
                 xx=range(len(fx))
                 xx=np.divide(xx,frameRate)
+                xx=np.divide(xx,60)
                 plt.scatter(xx,dispVecA,s=1)
-                plt.xlabel('Time (s)')
-                plt.ylabel('Dispersal (mm) (lim to 30mm)')
-                plt.ylim(0,30)
+                plt.xlabel('Time (min)')
+                plt.ylabel('Dispersal (mm) (lim to 25mm)')
+                plt.ylim(0,25)
                 saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
@@ -436,15 +445,22 @@ def dispersalFigures(dictList,l1,l2,startFrame=0,endFrame=432000,smoothWindow=12
                  
                 saveDir=aa[0]+'\\DispersalFigs\\StateProportions'
                 
-        # collect proportions in each state for each group
-        GroupStateProps.append(fishStateProps)
-
-    return GroupStateProps        
+            # collect proportions in each state for each group
+            GroupStateProps.append(fishStateProps)
+            meanDisp.append(np.mean(dispVec_sm))
+            SDDisp.append(np.std(dispVec_sm))
+            ### END OF FISH LOOP ###
+        GroupStatePropsS.append(GroupStateProps)
+        meanDispS.append(meanDisp)
+        SDDispS.append(SDDisp)
+        ### END OF DICT LOOP ###
+    return GroupStatePropsS,meanDispS,SDDisp  
                
                 
             
-def spatialMaps(dictList,startFrame=0,endFrame=60*60*120,gridSize=40,save=True,keepFigures=False):
+def spatialMaps(dictList,savepath=r'D:\\Shelf\\',startFrame=0,endFrame=60*60*120,gridSize=40,save=True,keepFigures=False):
     
+    savepath=savepath+r'\\spatialFigs\\'
     if save==False and keepFigures==False : print('Not saving or keeping figures...I guess you are debugging...?')
         
     # Maps for groups
@@ -1207,7 +1223,7 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
     if keepFigures==False: plt.close()
     return n1,n2
     
-def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\TurnFigs_Exc',saveFigures=True,keepFigures=False,label1='NO LABEL!',label2='NO LABEL!',col1='#486AC6',col2='#F3930C',LTurnThresh=[40,60]):
+def LRChainAnalysis(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,keepFigures=False,label1='NO LABEL!',label2='NO LABEL!',col1='#486AC6',col2='#F3930C',LTurnThresh=[40,60]):
     
     labelRand='Biased "coin flip"'
 #    labelCoin='Coin flip'

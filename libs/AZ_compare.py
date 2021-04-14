@@ -23,23 +23,21 @@ import scipy.stats as stats
 import AZ_figures as AZF
 
 
-def run(g1,g2,l1='Control',l2='Condition',save=True,recompute=False):  
+def run(g1,g2,l1='Control',l2='Condition',dicFolder=r'D:\Analysis\GroupedData\Dictionaries\\',savepath=r'D:\\Analysis\\GroupedData\\',save=True,recompute=False):  
 #    g1='EmxGFP_B0_200913'
 #    g2='WT_M0_200826'
 #    l1='Blank'
 #    l2='Maze'
 #    save=True
-    
-    dicFolder=r'D:\\Movies\\GroupedData\\Dictionaries\\'
-    dic1File=dicFolder+g1 +'.npy'
-    dic2File=dicFolder+g2+'.npy'
+    dic1File=dicFolder+r'\\'+g1 +'.npy'
+    dic2File=dicFolder+r'\\'+g2+'.npy'
     print('Comparing group metrics...')
-#    compareGroupStats(dic1File,dic2File)
+    compareGroupStats(dic1File,dic2File,l1,l2,savepath=savepath)
     dic1=np.load(dic1File,allow_pickle=True).item()
     dic2=np.load(dic2File,allow_pickle=True).item()
 #    compareGroupBoutAngleDistributions(dic1,dic2,l1,l2)
-    AZF.run(g1,g2,l1,l2,save=save,recompute=recompute)
-    return dic1,dic2
+    GroupStateProps=AZF.run(g1,g2,l1,l2,dicFolder=dicFolder,savepath=savepath,save=save,recompute=recompute)
+    return dic1,dic2,GroupStateProps
 
 #def compareGroupBoutAngleDistributions:
 ## Utilities for comparing and plotting differences between 2 or three groups
@@ -53,7 +51,7 @@ def run(g1,g2,l1='Control',l2='Condition',save=True,recompute=False):
 #    dicList.append(dic2File)
 #    print('Running group state figures')
 #  
-def compPlot(input1,input2,labels,figname,savepath,yint,ylabel,ylim,save=False):
+def compPlot(input1,input2,labels,figname,savepath,yint,ylabel,ylim,save=False,SE=False):
     
     plt.figure(figname,constrained_layout=True)
     
@@ -65,9 +63,15 @@ def compPlot(input1,input2,labels,figname,savepath,yint,ylabel,ylim,save=False):
 #    plt.boxplot(dBA,notch=False,showfliers=True)
     av1=np.mean(input1)
     av2=np.mean(input2)
-    se1=np.std(input1)/np.sqrt(len(input1))
-    se2=np.std(input2)/np.sqrt(len(input2))
     
+    # Check if using SE, if not use SD
+    if SE:
+        se1=np.std(input1)/np.sqrt(len(input1))
+        se2=np.std(input2)/np.sqrt(len(input2))
+    else:
+        se1=np.std(input1)
+        se2=np.std(input2)
+        
     # plot mean
     point1 = [1, av1]
     point2 = [2, av2]
@@ -109,12 +113,11 @@ def compPlot(input1,input2,labels,figname,savepath,yint,ylabel,ylim,save=False):
     if save:
         plt.savefig(savepath,dpi=600)
     
-def compareGroupStats(dic1File,dic2File,l1,l2,FPS=120,save=True,keep=False,recompute=False,col1='#486AC6',col2='#F3930C'):
-        
+def compareGroupStats(dic1File,dic2File,l1,l2,savepath=r'D:\\Analysis\\GroupedData\\',FPS=120,save=True,keep=False,recompute=False,col1='#486AC6',col2='#F3930C'):
+    savepath=savepath+r'\\Comparisons'    
     dic1Name,avgCumDistAV_1,avgCumDistSEM_1,avgBoutAmps_1,allBPS_1,avgBoutAV_1,avgBoutSEM_1,avgHeatmap_1,avgVelocity_1,avgAngVelocityBouts_1,biasLeftBout_1,LTurnPC_1        =   AZA.unpackGroupDictFile(dic1File)    
     dic2Name,avgCumDistAV_2,avgCumDistSEM_2,avgBoutAmps_2,allBPS_2,avgBoutAV_2,avgBoutSEM_2,avgHeatmap_2,avgVelocity_2,avgAngVelocityBouts_2,biasLeftBout_2,LTurnPC_2        =   AZA.unpackGroupDictFile(dic2File)    
     compName=dic1Name + ' vs ' + dic2Name
-    savepath=r'D:\\Movies\\GroupedData\\NewComparisons'
     #################### avgAngVel
     input1=avgAngVelocityBouts_1
     input2=avgAngVelocityBouts_2
@@ -396,7 +399,7 @@ def compareGroupStats(dic1File,dic2File,l1,l2,FPS=120,save=True,keep=False,recom
     input2=allBPS_2
     saveName=-1
     figname='avgBPS Comparison. Groups:'+ compName
-    saveName=savepath+r'\\'+compName + r'\\' + compName + '_avgVelocity.png'
+    saveName=savepath+r'\\'+compName + r'\\' + compName + '_BPS.png'
     ylabel='Bouts per second'
     yint=(0,0.5,1,1.5)
     ylim=(0,1.5)

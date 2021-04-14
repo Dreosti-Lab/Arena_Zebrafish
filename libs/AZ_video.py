@@ -319,11 +319,11 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,save
         # -----------------------------------------------------------------
         # Update the whole background estimate (everywhere except the (dilated) Fish)
         # Every 2 mins, recompute complete background
-        backgroundInterval=int(FPS*120)
+        backgroundInterval=int(FPS*(FPS*(2*60)))
        
         if((f%(backgroundInterval)==0) & (f!=0)):
             current_background=np.copy(backgroundFull)
-            backgroundFull,_=recomputeBackground(vid,f+startFrame,OrigROI)
+            backgroundFull,_=recomputeBackground(vid,f+startFrame,OrigROI,FPS)
             
             # Figure out where fish pixels are in the full image: hideous coding but the ndarray is messy to play with
             largest_cntFull=np.copy(largest_cnt)
@@ -543,9 +543,9 @@ def get_ROI_size(ROIs, numROi):
     
     return width, height
 
-def  recomputeBackground(vid,f,ROI):
+def  recomputeBackground(vid,f,ROI,FPS):
     
-    print('Updating background (' + str((f/120)/60) + ' mins done)')
+    print('Updating background (' + str((f/FPS)/60) + ' mins done)')
     # Allocate space for ROI background
     background_ROI = []
     w, h = get_ROI_size(ROI, 0)
@@ -558,7 +558,7 @@ def  recomputeBackground(vid,f,ROI):
     startFrame=f-(math.floor(stepFrames*math.floor((bFrames/2))))
     endFrame=f+(math.ceil(stepFrames*math.floor((bFrames/2))))
     
-    # check we do not run off the end of the video; run the 30 second window back back if needed, 'stepFrames' at a time
+    # check we do not run off the end of the video; run the 30 second window back if needed, 'stepFrames' at a time
     nF = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
     while(endFrame>nF):
         endFrame-=stepFrames

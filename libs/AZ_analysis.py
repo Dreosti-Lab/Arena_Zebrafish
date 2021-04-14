@@ -3,17 +3,18 @@
 Created on Wed May 07 19:13:12 2014
 
 @author: Elena
-"""
-# -----------------------------------------------------------------------------
-# Detect Platform
-import platform
-if(platform.system() == 'Linux'):
-    # Set "Repo Library Path" - Social Zebrafish Repo
-    lib_path = r'/home/kampff/Repos/Dreosti-Lab/Social_Zebrafish/libs'
-else:
-    # Set "Repo Library Path" - Social Zebrafish Repo
-    lib_path = r'C:/Repos/Dreosti-Lab/Social_Zebrafish/libs'
+#"""
+## -----------------------------------------------------------------------------
+## Detect Platform
+#import platform
+#if(platform.system() == 'Linux'):
+#    # Set "Repo Library Path" - Social Zebrafish Repo
+#    lib_path = r'/home/kampff/Repos/Dreosti-Lab/Social_Zebrafish/libs'
+#else:
+#    # Set "Repo Library Path" - Social Zebrafish Repo
+#    lib_path = r'C:/Repos/Dreosti-Lab/Social_Zebrafish/libs'
 
+lib_path = r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
 # Set Library Paths
 import sys
 sys.path.append(lib_path)
@@ -28,6 +29,10 @@ import scipy.ndimage as ndimage
 from scipy.optimize import curve_fit
 import AZ_math as AZM
 import cv2
+import pandas as pd
+
+
+
 #Finish later: extract each loom bout's movie... can use the same script to 
 #def extractMoviesFromStim(aviFile,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
 #    startFrame=startTime*60*120
@@ -43,6 +48,9 @@ import cv2
 #    
 #    for i,start in loomStarts:
 #        end=loomEnds[i]
+
+
+
 
 #  rotate all points in a list of trajectories (x and y seperately) by the initial heading
 def rotateTrajectoriesByHeadings(trajectoriesX,trajectoriesY,trajectoriesHeadings):
@@ -108,7 +116,7 @@ def extractVecFromStim(loomStarts,loomEnds,vecIn):
     
     return matOut
 
-def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120):
+def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120,latencyLimitFr=60):
 # Finds loom start and end positions in frames from input stimulus protocol parameters
 # startTime in minutes, length of adaptation
 # interval in minutes, time between looms
@@ -123,13 +131,17 @@ def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,fra
     firstLoomStart=startFrame+intervalFrames-durationFrames
     loomStarts=[]
     loomEnds=[]
+    checkLoomEnds=[]
     loomStarts.append(firstLoomStart)
     loomEnds.append(firstLoomStart+numFrames-1)
+    checkLoomEnds=[]
+    checkLoomEnds.append(firstLoomStart+latencyLimitFr-1)
     
     numLooms=np.int(np.floor((movieLengthFr-startFrame)/intervalFrames))
     for i in range(1,numLooms):
         loomStarts.append(loomStarts[i-1]+intervalFrames)
         loomEnds.append(loomEnds[i-1]+intervalFrames)
+        checkLoomEnds.append(checkLoomEnds[i-1]+intervalFrames)
         if loomEnds[i]>movieLengthFr:
             loomStarts[i]='xxx'
             loomEnds[i]='xxx'
@@ -138,7 +150,7 @@ def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,fra
             break
     
     
-    return loomStarts,loomEnds
+    return loomStarts,loomEnds,checkLoomEnds
     
 ## Dispersal analysis: take trajectory in 5 second windows and find the smallest circle that encompasses that trajectory. 
 ## Needs only fx, fy and framerate
@@ -421,11 +433,14 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
         else:
             if np.abs(m)<stopThreshold and i>ii+40:
                 for k in range(i,i+5):
-                    if k < len(smooth):
+                    if k < len(dM):
                         if np.abs(dM[k]) > stopThreshold:
+                            moving = 1
                             break
                         else:
                             moving = 0
+                    else:
+                        break
     
     # Extract all bouts (ignore last and or first, if clipped)
     boutStarts = np.array(boutStarts)
@@ -475,7 +490,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
     
     for b in range(0,len(boutStarts)):
         allBoutsDist[b,:] = distPerSec[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)] # extract velocity over this bout
-        allBouts[b,:] = motion_signal[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)] # extract velocity over this bout
+        allBouts[b,:] = motion_signal[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)] # extract motion over this bout
         allBoutsOrt[b,:] = rotateOrt(ort[(boutStarts[b]-preWindow):(boutStarts[b]+postWindow)]) # extract heading for this bout (rotated to zero initial heading)
         boutAngles[b] = np.mean(allBoutsOrt[b,-2:-1])-np.mean(allBoutsOrt[b,0:1]) # take the heading before and after
 
@@ -499,7 +514,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
         plt.figure('Bout finder Analysis First 30 seconds')
         xFr=range(len(motion_signal))
         x=np.divide(xFr,FPS)
-        ef=FPS*1*30
+        ef=FPS*30
         plt.plot(x[:ef],motion_signal[:ef])
         boutStartMarker=np.zeros(len(motion_signal[:ef]))
         boutMarker=np.zeros(len(motion_signal[:ef]))
@@ -513,7 +528,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
         figName='Bout finder Analysis'
         plt.title(figName)
         plt.xlabel('Time (s)')
-        plt.ylabel('Motion energy (AU)')
+        plt.ylabel('Velocity (mm/sec)')
         
         if plot and save:
             savepath=savepath+ '\\BoutFinder\\'
@@ -1091,6 +1106,6 @@ def compute_BTA(bouts_test, bouts_stim, output_test, output_stim, btaLength):
     BTA_stim[:,:,1] = SZU.burst_triggered_alignment(peaks_stim, output_test_padded, 0, btaLength*2)
     
     return BTA_test, BTA_stim
-    
+#ret,RTurns,LTurns,FSwims,BPS, allBouts, allBoutsDist, allBoutsOrt, boutAngles, LturnPC,boutStarts,boutEnds,_,_ = AZA.extractBouts(newFx,newFy,newOrt,newDistPerFrame, savepath=idF,plot=True)
 # FIN
     
