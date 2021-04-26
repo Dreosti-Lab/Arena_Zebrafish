@@ -56,10 +56,10 @@ def runTurnFigs(dicList,label1,label2,savepath=r'D:\\Shelf\\',keepFigures=True,s
     dic2=dicList[1]
     dict1=np.load(dic1,allow_pickle=True).item()
     dict2=np.load(dic2,allow_pickle=True).item()
-    n1,n2=turnTriggeredAngleHist(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
+#    n1,n2=turnTriggeredAngleHist(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)  currently broken
     LRChainAnalysis(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
     FLRBoutCompare(dict1,dict2,savepath=savepath,label1=label1,label2=label2,keepFigures=keepFigures,saveFigures=save)
-    return n1,n2
+#    return n1,n2
 
 def plotLoomTrajectoryFolder(trackingFolder):
     trackingFiles=[]
@@ -166,12 +166,13 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
             # find fish
             thisFish=dic['Ind_fish'][j]
             fishname=thisFish['info']['AviPath']
-            fishname=fishname[4:-4]
+            _,fishname=fishname.rsplit(sep=r'\\',maxsplit=1)
+            fishname=fishname[:-4]
             print('Loaded individual fish ' + fishname)
             # find avi
-            fishname=glob.glob(templateDir+r'\\'+fishname+'*.avi')
-            fishname=fishname[0]
-            img=AZU.grabFrame(fishname,0)
+            fish=glob.glob(templateDir+r'\\'+fishname+'*.avi')
+            fish=fish[0]
+            img=AZU.grabFrame(fish,0)
             
             # find tracking
             fx,fy,_,_,_,_,_,_,_ = AZU.grabTrackingFromFile(thisFish['info']['TrackingPath'])
@@ -219,11 +220,11 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 propSum=np.sum(prop)
                 thisFishProps.append(np.divide(propSum,len(fishState_sm)))
             fishStateProps.append(thisFishProps) # collect all relative times for this fish
-                                
+            print(savepath)
             if saveFigures:
-                aa=fishname.rsplit('\\',2)
+#                aa=fishname.rsplit('\\',2)
                 # space first 
-                saveDir=aa[0]+'\\DispersalFigs\\Space'
+                saveDir=savepath + '\\Space'
                 
                 figName='DispersalStateThreshMarques_Space20min'
                 plt.figure(figName)
@@ -239,7 +240,7 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 p3 = Line2D([0], [0], marker='o', color='w', label=states[3],markerfacecolor=colList[3],markersize=10)
                 plt.legend(handles=[p0,p1,p2,p3],bbox_to_anchor=(1.05, 1))
                 
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -248,7 +249,7 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                     saveDirS='D:\\Shelf\\DispersalFigs\\' + l1 + '\\Space'
                 else: saveDirS='D:\\Shelf\\DispersalFigs\\' + l2 + '\\Space'
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -262,13 +263,13 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 ax.axes.xaxis.set_visible(False)
                 ax.axes.yaxis.set_visible(False)
                 plt.legend(handles=[p0,p1,p2,p3],bbox_to_anchor=(1.05, 1))
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 plt.scatter(fx[144001:-1],fy[144001:-1],c=fishCol[144001:-1],s=1)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -276,9 +277,9 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 
                 # now time
                 if i ==0:
-                    saveDirS='D:\\Shelf\\DispersalFigs\\'+ l1 +'\\Time'
-                else: saveDirS='D:\\Shelf\\DispersalFigs\\' + l2 + '\\Time'
-                saveDir=aa[0]+'\\DispersalFigs\\Time'
+                    saveDirS=savepath + '\\' + l1 +'\\Time'
+                else: saveDirS=savepath + '\\' + l2 +'\\Time'
+                saveDir=savepath+'\\Time'
                 
                 figName='DispersalStateThreshMarques_Time20mins'
                 plt.figure(figName)
@@ -293,12 +294,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.ylabel('Dispersal (mm) (lim to 25mm)')
                 plt.ylim(0,25)
                 plt.legend(handles=[p0,p1,p2,p3],bbox_to_anchor=(1.05, 1))
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -313,12 +314,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.xlabel('Time (mins)')
                 plt.ylabel('Dispersal (mm) (lim to 25mm)')
                 plt.ylim(0,30)
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -333,12 +334,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.xlabel('Time (min)')
                 plt.ylabel('Dispersal (mm) (lim to 25mm)')
                 plt.ylim(0,25)
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -348,7 +349,7 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 if i ==0:
                     saveDirS='D:\\Shelf\\DispersalFigs\\' + l1 + '\\Distribution'
                 else: saveDirS='D:\\Shelf\\DispersalFigs\\' + l2 + '\\Distribution'
-                saveDir=aa[0]+'\\DispersalFigs\\Distribution'
+                saveDir=savepath+'\\Distribution'
                 
                 figName='DispersalDistribution'
                 plt.figure(figName)
@@ -357,12 +358,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.plot(c,dispHist)
                 plt.xlabel('Dispersal (mm)')
                 plt.ylabel('Frequency (Time frames)')
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -377,12 +378,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.plot(c,dispHist_pdf)
                 plt.xlabel('Normalised Dispersal')
                 plt.ylabel('Probability Density')
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -390,12 +391,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 figName='DispersalDistributionNorm50%'
                 plt.xlim(0,0.5)
 #                plt.ylim(0,0.06)
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -411,12 +412,12 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.plot(c,dispHist)
                 plt.xlabel('Dispersal (mm)')
                 plt.ylabel('Frequency (Time frames)')
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
@@ -431,19 +432,16 @@ def dispersalFigures(dictList,l1,l2,savepath=r'D:\\Shelf\\',templateDir=r'D:\\Te
                 plt.plot(c,dispHist_pdf)
                 plt.xlabel('Normalised Dispersal')
                 plt.ylabel('Probability Density')
-                saveName=saveDir+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDir+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                
-                saveName=saveDirS+'\\'+aa[2][:-4]+'_'+figName+'.png'
+                saveName=saveDirS+'\\'+fishname+'_'+figName+'.png'
                 AZU.cycleMkDirr(saveName)
                 print('Saving images at ' + saveName)
                 plt.savefig(saveName,dpi=600)
                 plt.close()
-                
-                 
-                saveDir=aa[0]+'\\DispersalFigs\\StateProportions'
                 
             # collect proportions in each state for each group
             GroupStateProps.append(fishStateProps)
@@ -1137,10 +1135,10 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
     rightTrigAngle2=[]
     leftTrigAngle2=[]
     
+    countTurns=-1
     for i,t in enumerate(boutSeq_1):
         if i==len(boutSeq_1)-1:break
         # find this bout in the original angles list
-        countTurns=-1
         toDo=True
         for j,k in enumerate(boo1):
             if toDo:
@@ -1149,17 +1147,16 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
                 if countTurns==i and t=='R':
                     rightTrigAngle1.append(allAngles1[j+1])
                     toDo=False
-                    break
+                    
                 if countTurns==i and t=='L':
                     leftTrigAngle1.append(allAngles1[j+1])
                     toDo=False
-                    break
             else: break
-
+        
+    countTurns=-1    
     for i,t in enumerate(boutSeq_2):
         if i==len(boutSeq_2)-1:break
         # find this bout in the original angles list
-        countTurns=-1
         toDo=True
         for j,k in enumerate(boo2):
             if toDo:
@@ -1168,11 +1165,9 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
                 if countTurns==i and t=='R':
                     rightTrigAngle2.append(allAngles2[j+1])
                     toDo=False
-                    break
                 if countTurns==i and t=='L':
                     leftTrigAngle2.append(allAngles2[j+1])
                     toDo=False
-                    break
             else: break
         
     leftHist1,cL1=np.histogram(leftTrigAngle1,bins=90)
@@ -1202,7 +1197,7 @@ def turnTriggeredAngleHist(dic1,dic2,savepath=r'D:\\Shelf\\',saveFigures=True,ke
     plt.ylim(0,0.15)
     plt.legend()
     
-    saveName=savepath+ 'TurnTrigHist_' + name1 + '_' + label1
+    saveName=savepath+ 'TurnTrigHist_' + name1 + '_' + label1 + '.png'
     if saveFigures: plt.savefig(saveName,dpi=600)
     if keepFigures==False: plt.close()
     
@@ -3260,4 +3255,4 @@ def indCumDistFig(cumDist,name,savepath,FPS=120,save=True,keep=False):
     if(keep==False):plt.close()
         
     return saveName
-#run(g1,g2,l1,l2,save=False)
+#run(g1,g2,l1=l1,l2=l2,save=False)

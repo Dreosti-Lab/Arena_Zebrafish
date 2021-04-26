@@ -116,41 +116,46 @@ def extractVecFromStim(loomStarts,loomEnds,vecIn):
     
     return matOut
 
-def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numFrames=240,frameRate=120,latencyLimitFr=60):
+def findLooms(movieLengthFr,startTime=15,interval=2,duration=1,numSecsAnalyse=2,frameRate=100,responseSeconds=0.5):
 # Finds loom start and end positions in frames from input stimulus protocol parameters
 # startTime in minutes, length of adaptation
 # interval in minutes, time between looms
 # duration in seconds, duration of stim (since stimulus ENDS on the marker time, so starts marker-duration)
 # movieLengthFr is length of full movie in frames including adaptation 
-# numFrames is the number of frames to extract for trajectory analysis
+# numFrames is the seconds to extract for trajectory analysis
 # frameRate is camera frame rate in Hz
 # returns lists of loomStart and end positions frame positions    
-    startFrame=startTime*60*120
-    intervalFrames=interval*60*frameRate
-    durationFrames=duration*frameRate
+    latencyLimitFr=np.int(responseSeconds*frameRate)
+    startFrame=np.int(startTime*60*frameRate)
+    intervalFrames=np.int(interval*60*frameRate)
+    durationFrames=np.int(duration*frameRate)
     firstLoomStart=startFrame+intervalFrames-durationFrames
     loomStarts=[]
     loomEnds=[]
-    checkLoomEnds=[]
+    respLoomEnds=[]
     loomStarts.append(firstLoomStart)
+    numFrames=np.int(numSecsAnalyse*frameRate)
     loomEnds.append(firstLoomStart+numFrames-1)
-    checkLoomEnds=[]
-    checkLoomEnds.append(firstLoomStart+latencyLimitFr-1)
+    respLoomEnds.append(firstLoomStart+latencyLimitFr-1)
     
     numLooms=np.int(np.floor((movieLengthFr-startFrame)/intervalFrames))
+    rem=False
     for i in range(1,numLooms):
         loomStarts.append(loomStarts[i-1]+intervalFrames)
         loomEnds.append(loomEnds[i-1]+intervalFrames)
-        checkLoomEnds.append(checkLoomEnds[i-1]+intervalFrames)
-        if loomEnds[i]>movieLengthFr:
+        respLoomEnds.append(respLoomEnds[i-1]+intervalFrames)
+        if loomEnds[i]>movieLengthFr or respLoomEnds[i]>movieLengthFr:
             loomStarts[i]='xxx'
             loomEnds[i]='xxx'
-            loomStarts.remove('xxx')
-            loomEnds.remove('xxx')
+            respLoomEnds[i]='xxx'
+            rem=True
             break
+    if rem:
+        respLoomEnds.remove('xxx')
+        loomStarts.remove('xxx')
+        loomEnds.remove('xxx')
     
-    
-    return loomStarts,loomEnds,checkLoomEnds
+    return loomStarts,loomEnds,respLoomEnds
     
 ## Dispersal analysis: take trajectory in 5 second windows and find the smallest circle that encompasses that trajectory. 
 ## Needs only fx, fy and framerate
@@ -531,7 +536,7 @@ def extractBouts(fx,fy, ort, distPerSec,name=[],savepath=[],FPS=120,plot=False, 
         plt.ylabel('Velocity (mm/sec)')
         
         if plot and save:
-            savepath=savepath+ '\\BoutFinder\\'
+            savepath=savepath+ 'BoutFinder/'
             AZU.cycleMkDir(savepath)
             saveName=savepath + name+'_BoutFinder.png'
             plt.savefig(saveName,dpi=600)

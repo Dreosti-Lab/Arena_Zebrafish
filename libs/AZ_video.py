@@ -319,7 +319,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=1,cropOp=1,FPS=120,save
         # -----------------------------------------------------------------
         # Update the whole background estimate (everywhere except the (dilated) Fish)
         # Every 2 mins, recompute complete background
-        backgroundInterval=int(FPS*(FPS*(2*60)))
+        backgroundInterval=int(FPS*(2*60))
        
         if((f%(backgroundInterval)==0) & (f!=0)):
             current_background=np.copy(backgroundFull)

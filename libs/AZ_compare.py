@@ -3,6 +3,7 @@
 Created on Fri Apr 17 12:05:07 2020
 
 @author: thoma
+
 """
 
 # Set "Library Path" - Arena Zebrafish Repo
@@ -23,7 +24,7 @@ import scipy.stats as stats
 import AZ_figures as AZF
 
 
-def run(g1,g2,l1='Control',l2='Condition',dicFolder=r'D:\Analysis\GroupedData\Dictionaries\\',savepath=r'D:\\Analysis\\GroupedData\\',save=True,recompute=False):  
+def run(g1,g2,l1='Control',l2='Condition',dicFolder=r'D:\\Analysis\\GroupedData\\Dictionaries\\',savepath=r'D:\\Shelf\\Compare\\',save=True,recompute=False):  
 #    g1='EmxGFP_B0_200913'
 #    g2='WT_M0_200826'
 #    l1='Blank'
@@ -765,5 +766,5 @@ def compareGroupStats3Dics(dic1File,dic2File,dic3File,FPS=120,save=True,keep=Fal
         plt.savefig(saveName,dpi=600)
         
     if(keep==False):plt.close()
-    
+#run(g1,g2,l1=l1,l2=l2,save=True,dicFolder=dicFolder,savepath=savepath)
 
