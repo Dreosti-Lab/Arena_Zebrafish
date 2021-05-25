@@ -40,7 +40,7 @@ def analyze(tracking):
     # Absolute Value of angular speed
     speed_abs_angle = np.abs(speed_angle)
 
-    # Filter negative/error values
+    # Detect negative/error values and set to zero
     bad_values = (area < 0) + (motion < 0) + (speed_space < 0)
     speed_space[bad_values] = 0.0
     speed_abs_angle[bad_values] = 0.0
@@ -56,6 +56,11 @@ def analyze(tracking):
 
     # Sum weighted signals
     bout_signal = speed_space_norm + speed_angle_norm + motion_norm
+
+    # Interpolate over bad values
+    for i, bad_value in enumerate(bad_values):
+        if bad_value == True:
+            bout_signal[i] = bout_signal[i-1]
 
     # Smooth signal for bout detection   
     bout_filter = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
@@ -75,7 +80,6 @@ def analyze(tracking):
     bouts = np.zeros([numBouts, 8])
 
     # Set bout parameters
-    count = 0
     for i in range(numBouts):
 
         start = starts[i] - 2   # Start frame (-2 frames)
@@ -100,27 +104,14 @@ def analyze(tracking):
         ax = np.cos(align_ort) * sx - np.sin(align_ort) * sy
         ay = -1 * (np.sin(align_ort) * sx + np.cos(align_ort) * sy)
 
-        plt.plot(x, y, 'y', alpha=0.1)
-        plt.plot(eye_x, eye_y, 'c', alpha=0.1)
-        plt.plot(pre_x, pre_y, 'm', alpha=0.1)
-        plt.plot(eye_x[0], eye_y[0], 'bo', alpha=0.1)
-        plt.plot(x[0], y[0], 'go', alpha=0.1)
-
         # Create a heading vector (start)
         vx = np.cos(align_ort)
         vy = -1*np.sin(align_ort)
-        plt.plot([x[0], x[0] + vx*5], [y[0], y[0] + vy*5], alpha=0.1)
 
         # Create a heading vector (stop)
         final_ort = np.median(2*np.pi*(ort[stop:(stop+5)] / 360.0))
         vx = np.cos(final_ort)
         vy = -1*np.sin(final_ort)
-        plt.plot([x[-1], x[-1] + vx*5], [y[-1], y[-1] + vy*5], alpha=0.1)
-        plt.plot(ax + x[0], ay + y[0], 'r', alpha=0.1)
-
-        count = count + 1
-        if(count == 1100):
-            plt.show()
 
         bouts[i, 0] = starts[i] - 2 # 2 frames before Upper threshold crossing 
         bouts[i, 1] = peaks[i]      # Peak frame
@@ -131,6 +122,9 @@ def analyze(tracking):
         bouts[i, 6] = ax[-1]
         bouts[i, 7] = ay[-1]
 
+    # Filter "tiny" bouts (net distance less than 1.5 pixels)
+    not_tiny_bouts = bouts[:, 5] > 1.5
+    bouts = bouts[not_tiny_bouts, :]
 
     # Debug
     #plt.vlines(peaks, 0, 1200, 'r')
@@ -142,12 +136,48 @@ def analyze(tracking):
     return bouts
 
 # Label Bouts
-def label(bouts):
+def label(tracking, bouts):
 
+    # Extract tracking
+    fx = tracking[:,0]
+    fy = tracking[:,1]
+    bx = tracking[:,2]
+    by = tracking[:,3]
+    ex = tracking[:,4]
+    ey = tracking[:,5]
+    area = tracking[:,6]
+    ort = tracking[:,7]
+    motion = tracking[:,8]
 
-    # Label bouts as turns, swims, etc.
+    # Compute spatial and angular speed 
+    speed_space, speed_angle=ARK_utilities.compute_bout_signals(bx, by, ort)
+
+    # Label bouts as turns (l, r), routines (R, L), and swims (S), etc.
+    initial_turns = []
+    angles = bouts[:,4]
+    distances = bouts[:,5]
     for bout in bouts:
-        print('hi')
+
+        # Extract bout features
+        start = int(bout[0])
+        peak = int(bout[1])
+        stop = int(bout[2])
+        duration = int(bout[3])
+        net_angle = bout[4]
+        net_distance = bout[5]
+
+        # Measure intial turn
+        if(duration >= 10):
+            initial_turns.append(np.sum(speed_angle[start:(start+10)]))
+        else:
+            initial_turns.append(0)
+    initial_turns = np.array(initial_turns)
+
+    # Classifly
+    R = (initial_turns > 15) * (distances > 5)
+    L = (initial_turns < -15) * (distances > 5)
+    plt.plot(initial_turns, distances, '.')
+    plt.show()
 
     return
 

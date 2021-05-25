@@ -51,14 +51,6 @@ for group in groups:
         bouts = ARK_bouts.analyze(tracking)
         num_bouts = bouts.shape[0]
 
-        plt.subplot(1,2,1)
-        plt.plot(tracking[:, 2], tracking[:, 3], 'k.', MarkerSize=1, alpha=0.5)
-        plt.subplot(1,2,2)
-        plt.plot(bouts[:, 4], bouts[:, 7], 'k.', MarkerSize=1, alpha=0.5)
-        plt.xlim(-180, 180)
-        plt.ylim(-20, 50)
-
-
         # Extract bout params
         dSpace = bouts[:,5]
         dAngle = bouts[:,4]
