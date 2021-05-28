@@ -19,11 +19,7 @@ sys.path.append(ARK_lib_path)
 import glob
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 
@@ -151,7 +147,9 @@ for i in (train_goalc):
 train=np.array(trainlist)
 goal=np.array(train_goal)
 
-xTrain,xValid,yTrain,yValid = train_test_split(train,goal)
+xTrain=train
+yTrain=goal #xTrain,xValid,yTrain,yValid = train_test_split(train,goal)
+
 # flatten internal lists
 def flattenForModelDF(vec,colnames):
     for i,thisBoutSet in enumerate(vec):
@@ -182,7 +180,7 @@ def flattenForModel(vec,colnames):
         
     df = pd.DataFrame (vec_flat, columns = colnames)
     return df
-flattenList=[xTrain,xValid,xTest_lesion,xTest_control] # flatten x lists in preparation for scaling
+flattenList=[xTrain,xTest_lesion,xTest_control] #flattenList=[xTrain,xValid,xTest_lesion,xTest_control] # flatten x lists in preparation for scaling
 columnnames=[]
 #distAttrib=[]
 #angAttrib=[]
@@ -245,7 +243,7 @@ train_valid=preppedX[1]
 test_lesion=preppedX[2]
 test_control=preppedX[3]
 goal=yTrain
-goal_valid=yValid
+#goal_valid=yValid
 goal_test_control=yTest_control
 goal_test_lesion=yTest_lesion
 
@@ -276,57 +274,57 @@ print('Relative MAE Lesion = ' + label + ' ' + str(mae_lesion_true / mae_lesion_
 
 # %% Individual models
 
-# Dist model
-label='Displacement'
-# make predictions on test sets
-predControl=model_Dist.predict(test_control)
-predLesion=model_Dist.predict(test_lesion)
-
-# compare to true
-mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,0]),axis=0)
-mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,0]),axis=0)
-
-# compare to shuffled
-mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,0]),axis=0)
-mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,0]),axis=0)
-
-# relative maes
-print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
-print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
-
-## Angle model
-label='Angle'
-# make predictions on test sets
-predControl=model_Angle.predict(test_control)
-predLesion=model_Angle.predict(test_lesion)
-
-# compare to true
-mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,1]),axis=0)
-mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,1]),axis=0)
-
-# compare to shuffled
-mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,0]),axis=0)
-mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,0]),axis=0)
-
-# relative maes
-print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
-print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
-
-## IBI model
-label='IBI'
-# make predictions on test sets
-predControl=model_Angle.predict(test_control)
-predLesion=model_Angle.predict(test_lesion)
-
-# compare to true
-mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,2]),axis=0)
-mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,2]),axis=0)
-
-# compare to shuffled
-mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,2]),axis=0)
-mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,2]),axis=0)
-
-# relative maes
-print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
-print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
+## Dist model
+#label='Displacement'
+## make predictions on test sets
+#predControl=model_Dist.predict(test_control)
+#predLesion=model_Dist.predict(test_lesion)
+#
+## compare to true
+#mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,0]),axis=0)
+#mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,0]),axis=0)
+#
+## compare to shuffled
+#mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,0]),axis=0)
+#mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,0]),axis=0)
+#
+## relative maes
+#print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
+#print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
+#
+### Angle model
+#label='Angle'
+## make predictions on test sets
+#predControl=model_Angle.predict(test_control)
+#predLesion=model_Angle.predict(test_lesion)
+#
+## compare to true
+#mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,1]),axis=0)
+#mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,1]),axis=0)
+#
+## compare to shuffled
+#mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,0]),axis=0)
+#mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,0]),axis=0)
+#
+## relative maes
+#print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
+#print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
+#
+### IBI model
+#label='IBI'
+## make predictions on test sets
+#predControl=model_Angle.predict(test_control)
+#predLesion=model_Angle.predict(test_lesion)
+#
+## compare to true
+#mae_ctrl_true = np.mean(np.abs(predControl - yTest_control[:,2]),axis=0)
+#mae_lesion_true = np.mean(np.abs(predLesion - yTest_lesion[:,2]),axis=0)
+#
+## compare to shuffled
+#mae_ctrl_shuffle = np.mean(np.abs(predControl - yTest_control_shuffle[:,2]),axis=0)
+#mae_lesion_shuffle = np.mean(np.abs(predLesion - yTest_lesion_shuffle[:,2]),axis=0)
+#
+## relative maes
+#print('Relative MAE Control = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_ctrl_true / mae_ctrl_shuffle))))
+#print('Relative MAE Lesion = ' + ' ' + label + ' ' + str(np.mean(np.abs(mae_lesion_true / mae_lesion_shuffle))))
 
