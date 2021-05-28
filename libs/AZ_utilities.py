@@ -24,6 +24,22 @@ from win32com.client import Dispatch
 import glob
 import pandas as pd
 
+def discretiseAngleVector(dAngle):
+    
+    out=[]
+    pturn=0
+    for i in dAngle:
+        if i > 10:
+            pturn+=1
+            out.append(1)
+        elif i < -10:
+            pturn+=1
+            out.append(-1)
+        else: 
+            out.append(0)
+    pturn= pturn / len(dAngle)
+        
+    return out,pturn
 
 def boolstr_to_floatstr(v):
     if v == 'True':
