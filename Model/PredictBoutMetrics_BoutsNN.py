@@ -235,7 +235,7 @@ def build_and_compile_model(nNeurons,loss,opt,met,input_shape=(5,3)):
 #model_Dist=build_and_compile_model(nNeurons,'mse','adam','mae')
 #model_Angle=build_and_compile_model(nNeurons,'mse','adam','mae')
 #model_IBI=build_and_compile_model(nNeurons,'mse','adam','mae')
-epochs=40
+epochs=500
 nNeurons=[15,300,300,3]
 model_Combined=build_and_compile_model(nNeurons,'mse','adam','mae')
 
@@ -253,7 +253,7 @@ goal_test_lesion=yTest_lesion
 #history_Angle=model_Angle.fit(train[:,13], goal[:,1], epochs=epochs)
 #history_IBI=model_IBI.fit(train[:,14], goal[:,2], epochs=epochs)
 
-history_Combined=model_Combined.fit(train, goal, epochs=epochs*3)
+history_Combined=model_Combined.fit(train, goal, epochs=epochs)
 
 # %% Performance
 ## Combined model
