@@ -25,6 +25,34 @@ import glob
 #import rpy2.robjects.numpy2ri
 #from rpy2.robjects.packages import importr
 #Rstats = importr('stats')
+def splitBarChart(bars1,bars2,bars3)
+
+    # set width of bars
+    barWidth = 0.25
+     
+    # set heights of bars
+#    bars3 = [0.65, 0.59] # Dist
+#    bars1 = [0.70, 0.68] # Angle 
+#    bars2 = [0.75,0.69] # IBI
+    
+    # Set position of bar on X axis
+    r1 = np.arange(len(bars1))
+    r2 = [x + barWidth for x in r1]
+    r3 = [x + barWidth for x in r2]
+    plt.figure('Last 5 Bouts Perceptron')
+    # Make the plot
+    plt.bar(r1, bars1, color='blue', label='Angle',width=barWidth, edgecolor='white')
+    plt.bar(r2, bars2, color='darkblue', label='IBI',width=barWidth, edgecolor='white')
+    plt.bar(r3, bars3, color='grey',label='Displacement', width=barWidth, edgecolor='white')
+            
+    # Add xticks on the middle of the group bars
+    plt.xticks([r + barWidth for r in range(len(bars1))], ['Control', 'Lesion'])
+     
+    # Create legend & Show graphic
+    
+    plt.legend()
+    plt.show()
+    plt.ylim(0.5,1.1)
 
 def run(g1,g2,l1,l2,savepath=r'D:\\Shelf\\',keepFigures=False,save=True,recompute=False,startFrame=0,endFrame=432000,gridSize=40,SO=False,dicFolder=r'D:\Analysis\GroupedData\Dictionaries\\'):
     
