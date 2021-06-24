@@ -103,8 +103,11 @@ pca.fit(np.vstack((group_bout_trajectories[0], group_bout_trajectories[1])))
 all_compressed = pca.transform(np.vstack((group_bout_trajectories[0], group_bout_trajectories[1])))
 controls_compressed = pca.transform(group_bout_trajectories[0])
 lesions_compressed = pca.transform(group_bout_trajectories[1])
-plt.plot(controls_compressed[:,0], controls_compressed[:,1], '.', alpha=0.1)
-plt.plot(lesions_compressed[:,0], lesions_compressed[:,1], 'r.', alpha=0.1)
+plt.plot(controls_compressed[:,0], controls_compressed[:,2], '.', alpha=0.1)
+plt.plot(lesions_compressed[:,0], lesions_compressed[:,2], 'r.', alpha=0.1)
+plt.show()
+
+plt.plot(all_compressed[:,0], all_compressed[:,1], 'k.', MarkerSize=3, alpha=0.05)
 plt.show()
 
 # Classify
