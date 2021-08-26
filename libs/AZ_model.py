@@ -82,18 +82,53 @@ def testModel(model,xTest,yTest,Uni=True,hack=True):
         
     return pred,predShuff,yTestShuff,mae_trueS,mae_shuff_pS,mae_shuff_tS
 
-def clipAndStandardise(DATALIST,paramLabels,scale=True,THRESHOLDS=[100,180,60]):
+#def clipAndStandardise(DATALIST,paramLabels,scaleMethod='max',scale=True,THRESHOLDS=[100,180,60]):
+#    
+#    for i, data in enumerate(DATALIST):
+#        for j,paramLabel in enumerate(paramLabels):
+#            tr=data[:,:-1,j]
+#            t=data[:,-1,j]
+#            if j == 0:
+#                tr[tr>THRESHOLDS[0]]=THRESHOLDS[0]
+#                t[t>THRESHOLDS[0]]=THRESHOLDS[0] # hack to get rid of very high values (where are these from!?)
+#            elif j==1:
+#                tr[tr>THRESHOLDS[1]]=THRESHOLDS[1] # hack to get rid of very high values (where are these from!?)
+#                tr[tr<-(THRESHOLDS[1]*-1)]=(THRESHOLDS[1]*-1)
+#                t[t>THRESHOLDS[1]]=THRESHOLDS[1] # hack to get rid of very high values (where are these from!?)
+#                t[t<(THRESHOLDS[1]*-1)]=(THRESHOLDS[1]*-1)
+#            elif j==2:
+#                tr[tr>THRESHOLDS[2]]=THRESHOLDS[2] # hack to get rid of very high values (where are these from!?)
+#                t[t>THRESHOLDS[2]]=THRESHOLDS[2]
+#            if scale:
+#                # Distance and IBI are log distributed
+#                # log then normalise (zero mean, min/max)
+#                # angle is normally distributed around 0
+#                # normalise to max (180)
+#                if j == 0 or j==2:
+#                    DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method=scaleMethod,logg=True)
+#                elif j ==1:
+#                    DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method=scaleMethod,logg=False)
+#            else:
+#                DATALIST[i][:,:-1,j]=tr
+#            DATALIST[i][:,-1,j]=t
+#    return DATALIST
+
+def clipAndStandardise(DATALIST,paramLabels,scaleTarget=False,scaleMethod='max',scale=True,THRESHOLDS=[100,180,60]):
     
     for i, data in enumerate(DATALIST):
         for j,paramLabel in enumerate(paramLabels):
-            tr=data[:,:-1,j]
             t=data[:,-1,j]
+            if scaleTarget:
+                tr=data[:,:,j]
+            else:
+                tr=data[:,:-1,j]
+                
             if j == 0:
                 tr[tr>THRESHOLDS[0]]=THRESHOLDS[0]
                 t[t>THRESHOLDS[0]]=THRESHOLDS[0] # hack to get rid of very high values (where are these from!?)
             elif j==1:
                 tr[tr>THRESHOLDS[1]]=THRESHOLDS[1] # hack to get rid of very high values (where are these from!?)
-                tr[tr<-(THRESHOLDS[1]*-1)]=(THRESHOLDS[1]*-1)
+                tr[tr<(THRESHOLDS[1]*-1)]=(THRESHOLDS[1]*-1)
                 t[t>THRESHOLDS[1]]=THRESHOLDS[1] # hack to get rid of very high values (where are these from!?)
                 t[t<(THRESHOLDS[1]*-1)]=(THRESHOLDS[1]*-1)
             elif j==2:
@@ -105,12 +140,21 @@ def clipAndStandardise(DATALIST,paramLabels,scale=True,THRESHOLDS=[100,180,60]):
                 # angle is normally distributed around 0
                 # normalise to max (180)
                 if j == 0 or j==2:
-                    DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method='max')
-                elif j ==1:
-                    DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method='max',logg=False)
+                    if scaleTarget: # then scale the whole dataset
+                        DATALIST[i][:,:,j]=logStandardiseRNN(tr,method=scaleMethod,logg=True)
+                    else: # otherwise only scale the inputs, not the targets (:-1 of each series)
+                        DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method=scaleMethod,logg=True)
+                        DATALIST[i][:,-1,j]=t
+                elif j ==1: 
+                    if scaleTarget: # then scale the whole dataset
+                        DATALIST[i][:,:,j]=logStandardiseRNN(tr,method=scaleMethod,logg=False)
+                    else: # otherwise only scale the inputs, not the targets (:-1 of each series)
+                        DATALIST[i][:,:-1,j]=logStandardiseRNN(tr,method=scaleMethod,logg=False)
+                        DATALIST[i][:,-1,j]=t
             else:
                 DATALIST[i][:,:-1,j]=tr
-            DATALIST[i][:,-1,j]=t
+                DATALIST[i][:,-1,j]=t
+                
     return DATALIST
 
 def generateSinWaveSeries(batch_size,n_steps,freq=5,Split=False,training_split=0.7,addNoise=True):
@@ -131,22 +175,30 @@ def generateSinWaveSeries(batch_size,n_steps,freq=5,Split=False,training_split=0
         return series[...,np.newaxis].astype(np.float32)
 
 
-def build_and_compile_RNNmodel(nNeurons,loss,opt,met,LSTM=False,input_shape=(None,3)):
+def build_and_compile_RNNmodel(nNeurons,loss,opt,met,scaleTarget=False,LSTM=False,input_shape=(None,3)):
     
     if LSTM:
         model = tf.keras.models.Sequential()
         model.add(tf.keras.layers.LSTM(nNeurons[0],return_sequences=True,input_shape=input_shape))
         for thisLayer in nNeurons[1:-2]:
             model.add(tf.keras.layers.LSTM(thisLayer,return_sequences=True))
-        model.add(tf.keras.layers.LSTM(nNeurons[-2],return_sequences=False))
-        model.add(tf.keras.layers.Dense(nNeurons[-1]))
+        if scaleTarget:
+            model.add(tf.keras.layers.LSTM(nNeurons[-2],return_sequences=True))
+            model.add(tf.keras.layers.LSTM(nNeurons[-1]))
+        else:
+            model.add(tf.keras.layers.LSTM(nNeurons[-2],return_sequences=False))
+            model.add(tf.keras.layers.Dense(nNeurons[-1]))
     else:
         model = tf.keras.models.Sequential()
         model.add(tf.keras.layers.SimpleRNN(nNeurons[0],return_sequences=True,input_shape=input_shape))
         for thisLayer in nNeurons[1:-2]:
             model.add(tf.keras.layers.SimpleRNN(thisLayer,return_sequences=True))
-        model.add(tf.keras.layers.SimpleRNN(nNeurons[-2],return_sequences=False))
-        model.add(tf.keras.layers.Dense(nNeurons[-1]))
+        if scaleTarget:
+            model.add(tf.keras.layers.SimpleRNN(nNeurons[-2],return_sequences=True))
+            model.add(tf.keras.layers.SimpleRNN(nNeurons[-1]))
+        else:
+            model.add(tf.keras.layers.SimpleRNN(nNeurons[-2],return_sequences=False))
+            model.add(tf.keras.layers.Dense(nNeurons[-1]))
     model.compile(loss=loss,
                   optimizer=opt,
                   metrics=[met])
@@ -165,17 +217,21 @@ def build_and_compile_DNNmodel(nNeurons,loss,opt,met,input_shape=(None,3)):
 
 def logStandardiseRNN(Series,method='max',logg=True):
     
-    
-    if method=='max':# then normalise min/max)
-        Series=Series-np.min(Series)
-        if logg:
-            Series=np.log(Series+1)
-        Series=Series/np.max(Series)
-    elif method=='std':# then normalise (zero mean unit variance)
-        Series-np.mean(Series)
-        if logg:
-            Series=np.log(Series+1)
-        Series=Series/np.std(Series)
+    if logg:
+        minn=np.min(Series)
+        Series-= minn
+        Series = np.log(Series+1)
+        Series+= minn
+        
+    if method=='max':# then normalise (min/max, 0:1)
+        Series-= np.min(Series)
+        Series/=np.max(Series)
+    elif method=='std':# then standardise (zero mean unit variance)
+        Series-=np.mean(Series)
+        Series/=np.std(Series)
+    elif method=='negMax':# then normalise (min/max -1:1)
+        Series-=np.mean(Series)
+        Series/=np.max(np.abs(Series))
     return Series
 
 def makeSeries(vec):
@@ -200,8 +256,8 @@ def makeSeriesRNN(vec):
         for i,iS in enumerate(vec):
             series[i][0][0]=iS
     return series
-
-def countAllBoutsSplit(groups,history_length,omitForwards=False,turnThresh=9.95,train_split=0.7,unroll=False):
+#### 
+def countAllBoutsSplit(groups,history_length,removeClippedBouts=False,omitForwards=False,turnThresh=9.95,train_split=0.7,unroll=False):
     num_train,num_test=0,0
     train_indicesS,test_indicesS=[],[]
     for i,group in enumerate(groups):
@@ -226,7 +282,7 @@ def countAllBoutsSplit(groups,history_length,omitForwards=False,turnThresh=9.95,
                                            
     return num_train,num_test,train_indicesS,test_indicesS
 
-def buildTrainTestSetsRNN(groups,omitForwards=False,turnThresh=9.95,keepGroupsSeperate=False,num_param=3,shuffle=False,FPS=120,history_length=5,prediction_target=1,train_split=0.7):
+def buildTrainTestSetsRNN(groups,removeClippedBouts=False,omitForwards=False,turnThresh=9.95,keepGroupsSeperate=False,num_param=3,shuffle=False,FPS=120,history_length=5,prediction_target=1,train_split=0.7):
     
     if len(groups)>4:groups=[groups] # if more than 4, then is unlikely to be a list of lists
     num_fish=0
@@ -234,7 +290,7 @@ def buildTrainTestSetsRNN(groups,omitForwards=False,turnThresh=9.95,keepGroupsSe
         num_fish+=len(i)
         
     # Create train / test datasets
-    num_train,num_test,train_indicesS,test_indicesS=countAllBoutsSplit(groups,history_length,omitForwards=omitForwards)
+    num_train,num_test,train_indicesS,test_indicesS=countAllBoutsSplit(groups,history_length,omitForwards=omitForwards,removeClippedBouts=removeClippedBouts)
     train_set_t = np.zeros((num_train, history_length, num_param))
     test_set_t = np.zeros((num_test, history_length, num_param))
     if prediction_target>1:

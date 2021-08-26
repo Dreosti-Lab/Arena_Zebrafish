@@ -34,13 +34,19 @@ importlib.reload(ARK_bouts)
 
 # Parameters
 GroupNameS = ['EC_B0','EA_M0','EC_B0','EA_B0']
-scale=True
 plot=True
 subplot=False
 keepFigures=False
 saveFig=True
 omitForwards=False
 LSTM=False
+scale=True
+scaleTarget=False # Input data will always be scaled, but target does not have to be. N.B. check that final layer of model is Dense 'Relu' if this is set to False
+#scaleMethod='max' # min/max 0 to 1
+#scaleMethod='std' # standardise (zero mean unit variance)
+scaleMethod='negMax' # min/max -1 to 1
+absAngle=True # if true, use the absolute angle (so machine doesn't have to predict left or right)
+removeClippedBouts=False
 
 pointsize=5
 FPS=120
@@ -50,15 +56,20 @@ numParams = 3
 #paramLabels=['boutDist',boutIBI']
 paramLabels=['boutDist','boutAngle','boutIBI']
 epochs=50
-nNeurons=[numParams,48,24,12,numParams*prediction_target]
-nNeuronsSingle=[1,48,24,12,1]
+nNeurons=[numParams,12,12,12,numParams*prediction_target]
+nNeuronsSingle=[1,36,36,36,1]
 #nNeurons=[numParams,36,36,36,numParams*prediction_target]
 ##nNeurons=[numParams,24,24,24,numParams*prediction_target]
 #nNeuronsSingle=[1,12,12,12,1]
 #nNeurons=[numParams,256,128,64,numParams*prediction_target]
 #nNeuronsSingle=[1,256,128,64,1]
+
 labbS=['Untrained','Trained'] # additional label to figure headings
-ParamFolder='Model_{0:d}_{1:d}_{2:d}_ep{3:d}_hist{4:d}_pred{5:d}'.format(nNeurons[1],nNeurons[2],nNeurons[3],epochs,history_length,prediction_target)+'_TEMP'
+if scaleTarget==True:
+    ss='True'
+else:
+    ss='False'
+ParamFolder='TESTStringentClip_'+'Model_{0:d}_{1:d}_{2:d}_ep{3:d}_hist{4:d}_pred{5:d}_targetScaled={7:s}_scaleMeth={6:s}'.format(nNeurons[1],nNeurons[2],nNeurons[3],epochs,history_length,prediction_target,scaleMethod,ss)+'_New'
 if omitForwards:
     ParamFolder = ParamFolder + '_OmitForward'
     for tind,t in enumerate(labbS):
@@ -66,6 +77,7 @@ if omitForwards:
 ParamFolder = ParamFolder + '_RNN'
 for tind,t in enumerate(labbS):
     labbS[tind]=t+'_RNN'
+if absAngle: ParamFolder=ParamFolder+'_absAngle'
 history_length+=prediction_target  # hack
 GroupHistS,GroupModelS=[],[]
 # loop through groups
@@ -83,16 +95,18 @@ for groupLoop,GroupName in enumerate(GroupNameS):
     boutGroups=[bout_paths_controls]#,bout_paths_lesions]
     
     print('Grabbing and splitting data for RNNs')
-    [train_set,train_goal,test_set,test_goal]=AZMo.buildTrainTestSetsRNN(boutGroups,omitForwards=omitForwards,FPS=FPS,prediction_target=prediction_target,history_length=history_length)
+    [train_set,_,test_set,_]=AZMo.buildTrainTestSetsRNN(boutGroups,omitForwards=omitForwards,FPS=FPS,prediction_target=prediction_target,history_length=history_length)
 
     # Collect and prepare data from all fish
     DATALIST=[train_set,test_set]#,train_set_shuffle,test_set_shuffle]
-    GOALLIST=[train_goal,test_goal]#,train_goal_shuffle,test_goal_shuffle]
-    THRESHOLDS=[100,180,60] # upper limits set on Distance, Angle (abs), IBI 
+#    GOALLIST=[train_goal,test_goal]#,train_goal_shuffle,test_goal_shuffle]
+    THRESHOLDS=[100,90,10] # upper limits set on Distance, Angle (abs), IBI 
     
-    print('Clipping and Standardising Datasets')
-    DATALIST=AZMo.clipAndStandardise(DATALIST,paramLabels,scale=scale,THRESHOLDS=THRESHOLDS)
-    
+    mess='Clipping and Standardising Datasets'
+    if scaleTarget==True:mess=mess+' and Targets'
+    print(mess)
+    DATALIST=AZMo.clipAndStandardise(DATALIST,paramLabels,scaleTarget=scaleTarget,scaleMethod=scaleMethod,scale=scale,THRESHOLDS=THRESHOLDS)
+
     # generate sin waves with some noise to use as data; same dims and training split as real
     print('Generating sin wave and random datasets to sanity check models')
     aa=DATALIST[0][:,:-1,0].shape
@@ -118,19 +132,19 @@ for groupLoop,GroupName in enumerate(GroupNameS):
     yTestRand=np.random.rand(a[0],a[1],1)
     yTestRandShuff=yTestRand[np.random.permutation(np.arange(0,yTestRand.shape[0],1))]
 
-
+    
     # Build and compile multivariate model
     print('Building and compiling multi- and uni-variate RNN models')
-    model_RNN = AZMo.build_and_compile_RNNmodel(nNeurons,'mse','adam','mae',LSTM=LSTM,input_shape=[None,3])
+    model_RNN = AZMo.build_and_compile_RNNmodel(nNeurons,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,3])
 
     # Build and compile univariate models for each parameter
-    model_RNN_Dist = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,input_shape=[None,1])
-    model_RNN_Angle = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,input_shape=[None,1])
-    model_RNN_IBI = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,input_shape=[None,1])
+    model_RNN_Dist = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,1])
+    model_RNN_Angle = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,1])
+    model_RNN_IBI = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,1])
 
     # Build and compile univariate model (identical) to test against random numbers and sin waves
-    model_RNN_Sin = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,input_shape=[None,1])
-    model_RNN_Rand = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,input_shape=[None,1])
+    model_RNN_Sin = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,1])
+    model_RNN_Rand = AZMo.build_and_compile_RNNmodel(nNeuronsSingle,'mse','adam','mae',LSTM=LSTM,scaleTarget=scaleTarget,input_shape=[None,1])
 
     # Fetch combined data
     xTrainAll=DATALIST[0][:,:-1,:]
@@ -141,8 +155,12 @@ for groupLoop,GroupName in enumerate(GroupNameS):
     yTestAll=DATALIST[1][:,-1,:]
     xTestDist=DATALIST[1][:,:-1,0]
     yTestDist=DATALIST[1][:,-1,0]
-    xTestAngle=DATALIST[1][:,:-1,1]
-    yTestAngle=DATALIST[1][:,-1,1]
+    if absAngle:
+        xTestAngle=np.abs(DATALIST[1][:,:-1,1])
+        yTestAngle=np.abs(DATALIST[1][:,-1,1])
+    else:
+        xTestAngle=DATALIST[1][:,:-1,1]
+        yTestAngle=DATALIST[1][:,-1,1]
     xTestIBI=DATALIST[1][:,:-1,2]
     yTestIBI=DATALIST[1][:,-1,2]
     
@@ -164,6 +182,9 @@ for groupLoop,GroupName in enumerate(GroupNameS):
             # Angle
             xTrain=AZMo.makeSeries(DATALIST[0][:,:-1,1])
             yTrain=AZMo.makeSeries(DATALIST[0][:,-1,1])
+            if absAngle:
+                xTrain=np.abs(xTrain)
+                yTrain=np.abs(yTrain)
             print('Training Univariate Angle model...')
             history_Angle=model_RNN_Angle.fit(xTrain,yTrain,epochs=epochs)
             
