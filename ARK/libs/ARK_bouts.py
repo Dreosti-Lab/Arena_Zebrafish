@@ -1,5 +1,5 @@
 DATAROOT = '/home/kampff/Data/Arena'
-LIBROOT = '/home/kampff/Repos/dreosti-lab/Arena_Zebrafish'
+LIBROOT = 'C:/Users/thoma/OneDrive/Documents/GitHub/Arena_Zebrafish'
 
 # Set library paths
 import os
@@ -21,8 +21,11 @@ import importlib
 importlib.reload(ARK_utilities)
 
 # Analyze Bouts
-def analyze(tracking):
-
+def analyze(tracking,path=False):
+    
+    if path:
+        tracking = np.load(tracking)['tracking']
+    
     # Extract tracking
     fx = tracking[:,0]
     fy = tracking[:,1]
@@ -127,11 +130,11 @@ def analyze(tracking):
     bouts = bouts[not_tiny_bouts, :]
 
     # Debug
-    #plt.vlines(peaks, 0, 1200, 'r')
-    #plt.plot(smooth_bout_signal*20)
-    #plt.plot(fx)
-    #plt.plot(fy)
-    #plt.show()
+    plt.vlines(peaks, 0, 1200, 'r')
+    plt.plot(smooth_bout_signal*20)
+    plt.plot(fx)
+    plt.plot(fy)
+    plt.show()
 
     return bouts
 
