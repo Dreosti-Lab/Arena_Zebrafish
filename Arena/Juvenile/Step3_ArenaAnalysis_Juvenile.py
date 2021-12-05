@@ -6,12 +6,12 @@ Created on Mon Nov 04 13:58:42 2019
 """
 # -----------------------------------------------------------------------------
 # Set "Library Path" - Arena Zebrafish Repo
-lib_path = r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\libs'
+lib_path = r'S:\WIBR_Dreosti_Lab\Tom\Github\Arena_Zebrafish\libs'
 #-----------------------------------------------------------------------------
 # Set Library Paths
 import sys
 sys.path.append(lib_path)
-lib_path = r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\ARK\libs'
+lib_path = r'S:\WIBR_Dreosti_Lab\Tom\GitHub\Arena_Zebrafish\ARK\libs'
 sys.path.append(lib_path)
 
 # Import useful libraries
@@ -84,7 +84,7 @@ trackingFiles1,tailXFiles1,tailYFiles1,tailFiles1,boutFiles1,bodyThetaFiles1=get
 #         thisBoutsStarts=groupBouts[k][:,1]
 #         for thisBoutStart in thisBoutsStarts:
 
-# cumulative distance and angle
+# cumulative distance
 cumDistS,distPerSecS=[],[]
 cumDistS1,distPerSecS1=[],[]
 for thisTrackingFile in trackingFiles:
@@ -165,10 +165,10 @@ figname='Cumulative distance'
 plt.figure(figname)
 for trace in sumS:
     plt.plot(trace,color='b',alpha=0.2,linewidth=2)
-plt.plot(cumDist,color='b',linewidth=2,alpha=0.9,label=labels[0])
+plt.plot(cumDist,color='b',linewidth=3,alpha=0.9,label=labels[0])
 for trace in sumS1:
     plt.plot(trace,color='r',alpha=0.2,linewidth=2)
-plt.plot(cumDist1,color='r',linewidth=4,alpha=0.9,label=labels[1])
+plt.plot(cumDist1,color='r',linewidth=3,alpha=0.9,label=labels[1])
 plt.xlabel('Time (s)')
 plt.xticks(ticks=[0,5*120*60,10*120*60,15*120*60,20*120*60],labels=[0,5,10,15,20])
 plt.ylabel('Distance (cm)')
@@ -176,7 +176,7 @@ plt.legend()
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 plt.savefig(savePath,dpi=600)
 
-# cumulative angle
+# cumulative angle?
 # streaks
 angle,seq=[],[]
 for thisCtrlBoutFile in boutFiles:
@@ -221,20 +221,17 @@ xlabel='Streak length'
 
 plt.figure(figname)
 plt.plot(hist_streaks_true_controls, 'b',label=labels[0])
-plt.plot(hist_streaks_random_controls, 'b--')
+plt.plot(hist_streaks_random_controls, 'b--',label=labels[0]+' shuffled')
 plt.plot(hist_streaks_true_lesions, 'r',label=labels[1])
-plt.plot(hist_streaks_random_lesions, 'r--')
-plt.show()
-
+plt.plot(hist_streaks_random_lesions, 'r--',label=labels[1]+' shuffled')
 plt.xlabel(xlabel)
 plt.ylabel(ylabel)
-plt.xlim(-100,100)
-plt.ylim(0,20)
+plt.xlim(0,10)
+plt.ylim(0,1)
+plt.legend()
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 plt.savefig(savePath,dpi=600)
 
-# Turn bias
-# streak prob
 # Proportion of turns
 
 # PCA projection of bouts (tSNE)
@@ -302,15 +299,13 @@ AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
 cond,ctrl=[],[]
 for thisCtrlBoutFile in boutFiles:
     thisCtrlBout=np.load(thisCtrlBoutFile)
-    ctrl.append(np.mean((thisCtrlBout[:,3]/FPS)*1000))
+    ctrl.append((np.mean(thisCtrlBout[:,3])/FPS)*1000)
 for thisCondBoutFile in boutFiles1:
     thisCondBout=np.load(thisCondBoutFile)
-    cond.append(np.mean((thisCondBout[:,3]/FPS)*1000))
-ctrl*=1000
-cond*=1000
+    cond.append((np.mean(thisCondBout[:,3])/FPS)*1000)
 figname='Durations'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
-ylabel='Miliseconds'
+ylabel='Bout Duration (ms)'
 xlabel='GroupName'
 yint=[0,50,100,150,200,250,300,350,400]
 ylim=[0,400]
@@ -326,7 +321,7 @@ for thisCondBoutFile in boutFiles1:
     cond.append(np.mean(np.abs(thisCondBout[:,4])))
 figname='Angles'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
-ylabel='Degrees'
+ylabel='Bout angle (degrees)'
 xlabel='GroupName'
 yint=[0,10,20,30,40,50,60]
 ylim=[0,60]
@@ -342,11 +337,44 @@ for thisCondBoutFile in boutFiles1:
     cond.append(np.mean(thisCondBout[:,5]*0.09))
 figname='Displacement'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
-ylabel='Displacement (mm)'
+ylabel='Bout Displacement (mm)'
 xlabel='GroupName'
 yint=[0,5,10]
 ylim=[0,10]
 AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
+
+# mean IBI and std
+cond,ctrl=[],[]
+condvar,ctrlvar=[],[]
+for thisCtrlBoutFile in boutFiles:
+    thisCtrlBout=np.load(thisCtrlBoutFile)
+    ctrlIBI=[]
+    for i in range(0,len(thisCtrlBout)-1):
+        ctrlIBI.append(thisCtrlBout[i+1,0]-thisCtrlBout[i,1])
+    ctrl.append(np.mean(ctrlIBI)/FPS)
+    ctrlvar.append(np.std(ctrlIBI)/FPS)
+for thisCondBoutFile in boutFiles1:
+    thisCondBout=np.load(thisCondBoutFile)
+    condIBI=[]
+    for i in range(0,len(thisCondBout)-1):
+        condIBI.append(thisCondBout[i+1,0]-thisCondBout[i,1])
+    cond.append(np.mean(condIBI)/FPS)
+    condvar.append(np.std(condIBI)/FPS)
+figname='IBI'
+savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
+ylabel='Interbout interval (s)'
+xlabel='GroupName'
+yint=[0,1,2,3,4]
+ylim=[0,4.5]
+AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
+figname='IBI Variance'
+savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
+ylabel='Interbout interval variance (s)'
+xlabel='GroupName'
+yint=[0,5,10,15,20,25]
+ylim=[0,25]
+AZC.compPlot(ctrlvar,condvar,labels,figname,savePath,yint,ylabel,ylim,save=save)
+  
 
 # proportion of turns vs swims
 

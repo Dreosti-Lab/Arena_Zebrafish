@@ -7,12 +7,12 @@ Created on Fri Nov 12 11:25:27 2021
 
 # -----------------------------------------------------------------------------
 # Set "Library Path" - Arena Zebrafish Repo
-lib_path = r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\libs'
+lib_path = r'S:\WIBR_Dreosti_Lab\Tom\Github\Arena_Zebrafish\libs'
 #-----------------------------------------------------------------------------
 # Set Library Paths
 import sys
 sys.path.append(lib_path)
-lib_path = r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\ARK\libs'
+lib_path = r'S:\WIBR_Dreosti_Lab\Tom\GitHub\Arena_Zebrafish\ARK\libs'
 sys.path.append(lib_path)
 
 # Import useful libraries
@@ -24,7 +24,8 @@ import AZ_utilities as AZU
 import ARK_bouts as ARKB
 
 FPS = 120
-folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Sham.txt'
+# folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Sham.txt'
+folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Lesion.txt'
 dateSuff=(datetime.date.today()).strftime("%y%m%d")
 sf=0*60*FPS
 ef=-1
