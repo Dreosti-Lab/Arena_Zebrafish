@@ -8,7 +8,7 @@ Adapted from Social Zebrafish workflow by Dreosti-Lab
 """
 
 # Set "Library Path" - Social Zebrafish Repo
-lib_path =r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\libs'
+lib_path =r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
 import sys
 sys.path.append(lib_path)
 
@@ -16,7 +16,7 @@ sys.path.append(lib_path)
 import glob
 import numpy as np
 import AZ_utilities as AZU
-import AZ_video_Juvenile as AZV
+import AZ_video_Juvenile as AZVJ
 import BONSAI_ARK
 import timeit
 import cv2
@@ -28,8 +28,8 @@ stim=False
 #folderListDir='D:\\'
 #folderListFile ='S:/WIBR_Dreosti_Lab/Tom/JuvenileFreeSwimming/2109xx.txt'
 #folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/LesionTest.txt'
-folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/LesionNew.txt'
-# folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/ShamNew.txt'
+#folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/LesionNew.txt'
+folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/ShamNew.txt'
 #folderListFile='D:/Wyart/MoviesToTrack/WyartCollabTest.txt'
 #folderListFile=folderListDir+folderListFile
 plot = True   # set  to true if you want to see the tracking as it happens... this slows the code significantly
@@ -139,8 +139,8 @@ for idx,folder in enumerate(folderNames):
         err=False
         try:
             
-            fxS, fyS, bxS, byS, exS, eyS, tailSegXS,tailSegYS,areaS, ortS, motS,failedAviFiles, errF = AZV.arena_fish_tracking(aviFile, figureDirPath, ROIs, cropSize=cropSize,plot=1, cropOp=1, FPS=FPS)
-#            finalTailAngle,cumulAngles,curvatures,tailmotion=AZV.computeTailCurvatures(tailSegXS,tailSegYS)
+            fxS, fyS, bxS, byS, exS, eyS, tailSegXS,tailSegYS,areaS, ortS, motS,failedAviFiles, errF = AZVJ.arena_fish_tracking(aviFile, figureDirPath, ROIs, cropSize=cropSize,plot=1, cropOp=1, FPS=FPS)
+#            finalTailAngle,cumulAngles,curvatures,tailmotion=AZVJ.computeTailCurvatures(tailSegXS,tailSegYS)
         except:
 #            print(str(f))
             print('aviFile failed during tracking, skipping...')
@@ -152,10 +152,10 @@ for idx,folder in enumerate(folderNames):
 #            if saveCroppedMovie:
 #                vid=cv2.VideoCapture(aviFile)
 #                saveName=folder+'\\' + expName +'_cropped.avi'
-#                AZV.makeCroppedMovieFromTracking(fxS,fyS,vid,saveName,FPS,cropSize)
+#                AZVJ.makeCroppedMovieFromTracking(fxS,fyS,vid,saveName,FPS,cropSize)
 #                tailVid=cv2.VideoCapture(tailAvi)
 #                saveName=folder + '\\' + expName + '_tail_segmented_cropped.avi'
-#                AZV.makeCroppedMovieFromTracking(fxS,fyS,tailVid,saveName,FPS,cropSize,color=True)
+#                AZVJ.makeCroppedMovieFromTracking(fxS,fyS,tailVid,saveName,FPS,cropSize,color=True)
 #                tailVid.release()
         
         vid.release()

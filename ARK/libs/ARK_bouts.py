@@ -197,7 +197,7 @@ def label(tracking, bouts):
                         -1.25660401e-01, -1.25796678e-01, -1.25729603e-01, -1.25808149e-01]
                         )
    
-    # Extract tr,acking
+    # Extract tracking
     X = tracking[:,2]
     Y = tracking[:,3]
     A = tracking[:,7]
