@@ -8,7 +8,9 @@ Adapted from Social Zebrafish workflow by Dreosti-Lab
 """
 
 # Set "Library Path" - Social Zebrafish Repo
-lib_path =r'C:\Users\Tom\Documents\GitHub\Arena_Zebrafish\libs'
+lib_path = r'S:\WIBR_Dreosti_Lab\Tom\Github\Arena_Zebrafish\libs'
+#-----------------------------------------------------------------------------
+# Set Library Paths
 import sys
 sys.path.append(lib_path)
 
