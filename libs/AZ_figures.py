@@ -25,7 +25,7 @@ import glob
 #import rpy2.robjects.numpy2ri
 #from rpy2.robjects.packages import importr
 #Rstats = importr('stats')
-def splitBarChart(bars1,bars2,bars3)
+def splitBarChart(bars1,bars2,bars3):
 
     # set width of bars
     barWidth = 0.25

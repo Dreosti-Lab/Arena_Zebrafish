@@ -9,6 +9,42 @@ import numpy as np
 from scipy import stats
 from itertools import compress
 
+def seqToProb(seq):
+# Label bouts
+    labels_true=seq
+    streaks_true,streaks_random=[],[]
+    # Randomize labels
+    labels_random = np.random.permutation(labels_true)
+
+    # Measure streaks (true)
+    prev_label = labels_true[0]
+    current_streak = 1
+    for label in labels_true[1:]:
+        # Ignore swims?
+        if label == 0:
+            continue
+        if label == prev_label:
+            current_streak = current_streak + 1
+        else:
+            streaks_true.append(current_streak)
+            prev_label = label
+            current_streak = 1
+
+    # Measure streaks (random)
+    prev_label = labels_random[0]
+    current_streak = 1
+    for label in labels_random[1:]:
+        # Ignore swims?
+        if label == 0:
+            continue
+        if label == prev_label:
+            current_streak = current_streak + 1
+        else:
+            streaks_random.append(current_streak)
+            prev_label = label
+            current_streak = 1
+    return streaks_true,streaks_random
+
 def angleToSeq_LR(angles,turnThresh=9.75):
     
     seq=[]        
@@ -17,6 +53,18 @@ def angleToSeq_LR(angles,turnThresh=9.75):
         if i >turnThresh: seq.append('L'); keep.append(1)
         elif i <(turnThresh*-1): seq.append('R'); keep.append(1)
         elif i <turnThresh and i >(turnThresh*-1): seq.append('F'); keep.append(0)
+    boo=np.asarray(keep)>0
+    seqLR=list(compress(seq, boo))
+    return boo,seqLR
+
+def angleToSeq_1(angles,turnThresh=9.75,keepForward=True):
+    if keepForward:keepF=1
+    seq=[]        
+    keep=[]
+    for i in angles:
+        if i >turnThresh: seq.append(1); keep.append(1)
+        elif i <(turnThresh*-1): seq.append(-1); keep.append(1)
+        elif i <turnThresh and i >(turnThresh*-1): seq.append(0); keep.append(keepF)
     boo=np.asarray(keep)>0
     seqLR=list(compress(seq, boo))
     return boo,seqLR

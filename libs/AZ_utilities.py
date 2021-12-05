@@ -14,7 +14,7 @@ sys.path.append(lib_path)
 # -----------------------------------------------------------------------------
 
 # Import useful libraries
-import AZ_video as AZV
+import AZ_video_Juvenile as AZVJ
 import AZ_math as AZM
 import os
 import numpy as np
@@ -23,6 +23,298 @@ import cv2
 from win32com.client import Dispatch
 import glob
 import pandas as pd
+import scipy.ndimage
+import imageio
+
+ # find difference before stimulus
+def makeDiffImg(folder,vid,startFrame,numFrames,stepFrames,previous,height,width,bgSuff='',diffSuff=''):
+     
+    bFrames = 50
+    thresholdValue=10
+    accumulated_diff = np.zeros((height, width), dtype = float)
+    backgroundStack = np.zeros((height, width, bFrames), dtype = float)
+    background = np.zeros((height, width), dtype = float)
+    print(str(startFrame))
+    print(str(numFrames))
+    print(str(stepFrames))
+     
+    for i, f in enumerate(range(int(startFrame), int(numFrames), int(stepFrames))):
+   
+        vid.set(cv2.CAP_PROP_POS_FRAMES, f)
+        ret, im = vid.read()
+        current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        absDiff = cv2.absdiff(previous, current)
+        level, threshold = cv2.threshold(absDiff,thresholdValue,255,cv2.THRESH_TOZERO)
+        previous = current
+  
+        # Accumulate differences
+        accumulated_diff = accumulated_diff + threshold
+         
+        bCount=0
+        # Add to background stack
+        if(bCount < bFrames):
+            backgroundStack[:,:,bCount] = current
+            bCount = bCount + 1
+   
+        print (numFrames-f)
+        print (bCount)
+
+    # Normalize accumulated difference image
+    accumulated_diff = accumulated_diff/np.max(accumulated_diff)
+    accumulated_diff = np.ubyte(accumulated_diff*255)
+
+    # Enhance Contrast (Histogram Equalize)
+    equ = cv2.equalizeHist(accumulated_diff)
+    
+    # Compute Background Frame (median or mode)
+    background = np.uint8(np.median(backgroundStack, axis = 2))
+
+    saveFolder = folder
+    imageio.imwrite(saveFolder + r'/difference' + diffSuff + '.png', equ)    
+    imageio.imwrite(saveFolder + r'/background' + bgSuff + '.png', background)
+    # Using SciPy to save caused a weird rescaling when the images were dim.
+    # This will change not only the background in the beginning but the threshold estimate
+
+    return 0
+     
+def pre_process_video_OMR(folder):
+    
+     FPS=120
+     # Load Video
+     aviFiles = glob.glob(folder+'/*.avi')
+     aviFile = aviFiles[0]
+     vid = cv2.VideoCapture(aviFile)
+     
+     stimFiles = glob.glob(folder+'/*.csv')
+     stimFile = stimFiles[0]
+     stim =pd.DataFrame.to_numpy(pd.read_csv(stimFile, sep=',',header=None))
+     stimStart=stim[0,0]*FPS
+     stimDuration=(stim[0,1]*FPS)
+     # Ori=np.round(stim[0,4]/(np.pi/180)) # 90 is left on the movie (away from heat)
+         
+     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+     
+     # Read First Frame
+     ret, im = vid.read()
+     previous = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+     width = np.size(previous, 1)
+     height = np.size(previous, 0)
+   
+     # Alloctae Image Space
+     stepFrames = 250 # Add a background frame every 2.5 seconds for 50 seconds
+            
+     # make overall background and difference images
+     makeDiffImg(folder,vid,0,numFrames,stepFrames,previous,height,width)
+     # make pre-stim background and difference images
+     makeDiffImg(folder,vid,int(stimStart),int(stimDuration),stepFrames,previous,height,width,bgSuff='preStim',diffSuff='preStim')
+     # make post-stim background and difference images
+     makeDiffImg(folder,vid,stimStart+stimDuration,numFrames-(stimStart+stimDuration),stepFrames,previous,height,width,bgSuff='postStim',diffSuff='postStim')
+     return 0
+
+
+def subpixel_intensity(image, x, y):
+    xi = np.int(np.round(x))
+    yi = np.int(np.round(y))
+    dx = x - xi
+    dy = y - yi
+    weight_tl = (1.0 - dx) * (1.0 - dy)
+    weight_tr = (dx)       * (1.0 - dy)
+    weight_bl = (1.0 - dx) * (dy)
+    weight_br = (dx)       * (dy)
+    accum = 0.0
+    accum += weight_tl * image[yi, xi]
+    accum += weight_tr * image[yi, xi+1]
+    accum += weight_bl * image[yi+1, xi]
+    accum += weight_br * image[yi+1, xi+1]
+    return accum
+
+# Get intensity profile along arc
+def arc_profile(image, x, y, radius, start_theta, stop_theta, step_theta):
+    profile = []
+    xs = []
+    ys = []
+    for t in np.arange(start_theta, stop_theta, step_theta):
+        nx = x + (radius * np.cos(t))
+        ny = y + (radius * np.sin(t))
+        value = subpixel_intensity(image, nx, ny)
+        xs.append(nx)
+        ys.append(ny)
+        profile.append(value)    
+    return np.array(profile), np.array(xs), np.array(ys)
+
+
+
+# debug script
+
+def testArc(xo,yo,heading,diffimg,arcLen=90,arcRad=7,arcSam=2.5):
+    
+    mask=np.copy(diffimg)
+    arc=findArc(xo,yo,heading,arcLen=arcLen,arcRad=arcRad,arcSam=arcSam)
+    mask[int(xo),int(yo)]=255
+    for a in arc:
+        mask[int(a[0]),int(a[1])]=128
+    [h,w]=diffimg.shape
+    arcVals=getArcVals(arc,diffimg,w,h)
+    arcFilt=scipy.ndimage.gaussian_filter1d(arcVals, 5)
+    peak=arc[np.argmax(arcFilt)]
+    mask[int(peak[0]),int(peak[1])]=255
+#    plt.imshow(mask)
+    return arc,peak,mask
+
+def getArcVals(arc,img,w,h):
+    arcVals=[]
+    for idx,a in enumerate(arc):
+#        print('n='+str(idx))
+        if a[0]>=h: a[0]=h-2
+        if a[1]>=w: a[1]=w-2
+        arcVals.append(getSubPixelIntensity(a,img))
+    return arcVals
+
+def findArc(xo,yo,heading,img,arcLen=90,arcRad=7,arcSam=2.5,debugFlag=False):
+    conv=np.pi/180
+    # heading comes in between -180 and +180
+    if heading<0:
+        heading+=360
+    
+    # flip the heading
+    if heading<180:
+        vec=heading+180
+    else:
+        vec=heading-180
+    
+    # define start and end angles for arc, convert to radians
+    radInt=arcSam*conv
+    startArcAngle=(vec-(arcLen*0.5))
+    if startArcAngle<0:
+        startArcAngle+=360
+    startArc=startArcAngle*conv
+    endArcAngle=(vec+(arcLen*0.5))
+    if endArcAngle>360:
+        endArcAngle-=360
+    endArc=endArcAngle*conv
+    # debug
+    # find number of angle samples
+    numSam=int(np.round(np.divide(arcLen,arcSam)))
+    # find range of angles to find along arc (swap start and end if end is smaller than start)
+#    if np.abs(np.subtract(endArcAngle,startArcAngle))>100:
+#        print('heading='+str(heading))
+#        print('vec='+str(vec))
+#        print('arcLen='+str(arcLen))
+#        print('actualLen='+str(np.abs(np.subtract(endArcAngle,startArcAngle))))
+#        print('startAngle='+str(startArcAngle))
+#        print('endAngle='+str(endArcAngle))
+#    if startArcAngle>endArcAngle:
+#        interval=arcSam*-1
+#    else:
+#        interval=arcSam
+#    angles = np.arange(startArcAngle, endArcAngle, interval)
+#    rads=np.linspace(startArc,endArc,numSam)
+    rads=[]
+    rads.append(startArcAngle*conv)
+    for i in range(1,numSam):
+        rT=rads[i-1]+radInt
+        if rT>(np.pi*2):
+            rT-=(np.pi*2)
+        rads.append(rT)
+    points_list=[]
+    xs=[]
+    ys=[]
+    for a in rads:
+        x=xo + (np.sin(a) * arcRad)
+        y=yo + (np.cos(a) * arcRad)
+        # reflect x (actually y) along a horizontal line from the origin x (actually y)
+        x-=2*np.subtract(x,xo)
+        xs.append(x)
+        ys.append(y)
+        points_list.append([x,y]) 
+    [h,w]=img.shape
+    arcVals=getArcVals(points_list,img,w,h)
+#    points_list=removeDuplicates(points_list)
+    return arcVals,np.asarray(points_list)[:,1],np.asarray(points_list)[:,0]
+    
+# Scripts to find circle edges given origin and radius
+def removeDuplicates(lst):
+      
+    return [t for t in (set(tuple(i) for i in lst))]
+
+def findCircleEdgeSubPix(xo=64,yo=64,r=5,sampleN=144):
+
+    rads = np.linspace(0, 2 * np.pi, sampleN, endpoint=False)
+    points_list=[]
+    for a in rads:
+        x=xo + np.sin(a) * r
+        y=yo + np.cos(a) * r
+        points_list.append([x,y]) 
+        
+#    points_list=removeDuplicates(points_list)
+    return points_list
+
+def findCircleEdge(xo=64,yo=64,r=5,sampleN=144):
+
+    rads = np.linspace(0, 2 * np.pi, sampleN, endpoint=False)
+    points_list=[]
+    for a in rads:
+        x=int(np.round(xo + np.sin(a) * r))
+        y=int(np.round(yo + np.cos(a) * r))
+        points_list.append([x,y]) 
+        
+#    points_list=removeDuplicates(points_list)
+    return points_list
+
+def getSubPixelIntensity(a,image): # only works one pixel radius... consider convolutional method for variable kernel sizes
+    
+    [x,y]=a
+    # round coordinates to find root pixel
+    xR=np.int(np.round(x))
+    yR=np.int(np.round(y))
+    dims=image.shape
+    # triple check we're not at the edge
+    if xR>=dims[1]-1:xR=dims[1]-2
+    if yR>=dims[0]-1:yR=dims[0]-2
+        
+    # mod to 1 (how much closer to the adjacent pixel am I?)
+    remX=np.mod(x,1)
+    remY=np.mod(y,1)
+    
+    # find how much closer you are to the diagonal pixel
+    remD=np.sqrt(((1-remX)**2)+((1-remY)**2))
+    
+    # decide which direction we go to find adjacent pixels
+    if x-xR<0:
+        adjX=xR-1
+    else:
+        adjX=xR+1
+    if y-yR<0:
+        adjY=yR+1
+    else:
+        adjY=yR-1
+    
+    # find intensity of root pixel
+    iR=image[xR,yR]
+
+    # weight root and add weighted points in each direction...
+#    check=[adjX,adjY,yR,xR]
+#    if np.max(check)>dims[0]-1:
+#        print('here')
+    valX=(iR*remX)+(image[adjX,yR]*(1-remX))
+    valY=(iR*remY)+(image[xR,adjY]*(1-remY))
+    valD=(iR*remD)+(image[adjX,adjY]*(1-remD))
+    
+    # return the mean
+    return np.mean([valX,valY,valD])
+
+
+def getBresenhamOctantPixels(xc,yc,x,y,symPixList=[]):
+    symPixList.append([xc+x, yc+y])
+    symPixList.append([xc-x, yc+y])
+    symPixList.append([xc+x, yc-y])
+    symPixList.append([xc-x, yc-y])
+    symPixList.append([xc+y, yc+x])
+    symPixList.append([xc-y, yc+x])
+    symPixList.append([xc+y, yc-x])
+    symPixList.append([xc-y, yc-x])
+
+    return symPixList
 
 def discretiseAngleVector(dAngle):
     
@@ -587,7 +879,7 @@ def plotMotionMetrics(trackingFile,startFrame,endFrame):
     plt.title('Cumulative distance')    
     
     return cumDistPerFrame
-    
+
 def trackFrame(aviFile,f0,f1,divisor):
 ## Tracks fish across two defined frames (f0 and f1) of a given movie (aviFile) and using a background threshold divided by defined divisor.
 ## Returns a threshold value for this tracking iteration for this movie that depends on given divisor    
@@ -610,7 +902,7 @@ def trackFrameBG(ROI,aviFile,f1,divisor):
 ## Returns a threshold value for this tracking iteration for this movie that depends on given divisor    
 ## Used to test background computation parameters and diagnosis of problem frames in tracking  
     vid = cv2.VideoCapture(aviFile)
-    im0=AZV.compute_initial_background(aviFile, ROI)
+    im0=AZVJ.compute_initial_background(aviFile, ROI)
     im1=grabFrame(vid,f1)
     im1 = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
     diff = im0 - im1
@@ -621,6 +913,20 @@ def trackFrameBG(ROI,aviFile,f1,divisor):
     return threshold
 
 ## Video handling #############################################################    
+def cropMovie(aviFile,ROI,outname='Cropped.avi',FPS=100):
+    
+    vid = cv2.VideoCapture(aviFile)
+    numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
+    w, h = AZVJ.get_ROI_sizeSingle(ROI)
+    outFile=r'D:\\Movies\\cache\\'+outname
+    out = cv2.VideoWriter(outFile, cv2.VideoWriter_fourcc(*'DIVX'), FPS, (w,h), False)
+    for i in range(numFrames):
+        im=np.uint8(grabFrame32(vid,i))
+        crop, _,_ = AZVJ.get_ROI_cropSingle(im,ROI)
+        out.write(crop)
+    out.release()
+    
+    return 0
 
 def trimMovie(aviFile,startFrame,endFrame,saveName):
 ## Creates a new movie file with 'saveName' and desired start and end frames.    
@@ -647,10 +953,12 @@ def trimMovie(aviFile,startFrame,endFrame,saveName):
         
     out.release()
     vid.release()
-    
+    return 0
+
 def setFrame(vid,frame):
 ## set frame of a cv2 loaded movie without having to type the crazy long cv2 command
     vid.set(cv2.CAP_PROP_POS_FRAMES, frame)
+    return 0
 
 def grabFrame(avi,frame):
 # grab frame and return the image from loaded cv2 movie
@@ -676,7 +984,7 @@ def showFrame(vid,frame):
     im = np.float32(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
     plt.figure()
     plt.imshow(im)
-
+    return 0
 
 def read_folder_list(folderListFile): 
 ## Read Folder List file 
