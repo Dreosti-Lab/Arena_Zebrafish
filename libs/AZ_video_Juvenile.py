@@ -15,13 +15,26 @@ import cv2
 import AZ_utilities as AZU
 
 # Process Video : Track fish in AVI
-def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,saveCroppedMovie=1,cropSize=[128,128],startFrame=0,display=False):
-
+def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,saveCroppedMovie=True,startFrame=0,display=False,trackTail=True,larvae=True):
+    if larvae:
+        gauss_filt=3
+        tailThreshold=10
+        kernelSize=5
+        areaLimit=285
+        cropSize=[128,128]
+        BGstartFrame=(1*60)*FPS # frame of movie with which to start computing the background... avoids having fish in background if frozen for first few minutes after transfer
+    else:
+        gauss_filt=5
+        tailThreshold=15
+        kernel=12
+        areaLimit=2000
+        cropSize=[256,256]
+        BGstartFrame=(3*60)*FPS # frame of movie with which to start computing the background... avoids having fish in background if frozen for first few minutes after transfer
     #    l=0
     arcRad=8 # this is the initial radius of the arcs that will find the tip of the tail
     arcNum=7 # this is the total number of segments the algorithm will divide the tail into once it's found the tip
     arcSam=2.5 # this is the distance between angle samples the draw the circle and arcs that find the body and tail
-    startFrame=(3*60)*FPS
+    
     if plot:
         pmsg='ON'
     else:
@@ -30,7 +43,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
         cmsg='ON'
     else:
         cmsg='OFF. WARNING!! Tracking can take a very long time with cropping turned OFF'
-    if saveCroppedMovie==1:
+    if saveCroppedMovie:
         smsg='ON. WARNING!! this takes some time'
     else:
         smsg='OFF'
@@ -58,7 +71,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
     # Compute a "Starting" Background
     # - Median value of 100 frames sampled evenly across first 30 secs
     
-    backgroundFull = compute_initial_background(vid, ROI,startFrame=startFrame)
+    backgroundFull = compute_initial_background(vid, ROI,startFrame=BGstartFrame)
     
     # 5 seconds
     
@@ -74,17 +87,13 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
     # 9. Find crop region based on fx,fy coordinates and provided cropSize
     # 10. Crop previous_ROI, current, and background on following loops (steps 3 through 7)
     # 11. Save cropped movie
-    maxNumFrames=144000#(5*60)*120#144000#120*60*5#432000
+    maxNumFrames=432000#144000#(5*60)*120#144000#120*60*5
     numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))-100 # Skip, possibly corrupt, last 100 frames (1 second)
     numFrames = numFrames - startFrame
     if numFrames>maxNumFrames:numFrames=maxNumFrames
-    
-#    numFrames=(numFrames-startFrame)
     previous_ROI=[]
     previous_ROI.append(np.zeros((h,w),dtype = np.uint8))
 
-#    For testing
-    #numFrames=30*120
     ########################
     # Allocate Tracking Data Space
     fxS = np.zeros((numFrames,1))           # Fish X
@@ -98,13 +107,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
     motS = np.zeros((numFrames,1))          # frame-by-frame change in segmented particle
       
     cropFlag = 0
-#    startFrame=2090 # debug
     vid.set(cv2.CAP_PROP_POS_FRAMES, startFrame)    # start at startFrame
     print('Tracking')
     
     noContoursCount=0               
-#    limitError=0.1
-#    limitFrames=np.floor(numFrames*limitError)
     fishSegX_allFramesT=[]
     fishSegY_allFramesT=[]
     for f in range(numFrames):
@@ -113,60 +119,44 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
 #        if (f%120) == 0:
 #            print ('\r'+ str(f) + ' of ' + str(numFrames) + ' frames done')
         
-        
-        ################### TESTING ######################
-#        if(f==9):
-#            print('here')
-#        print(f)
-#        print(f+startFrame)
-        ##################################################
-        if f==0:
+        if f==0 and saveCroppedMovie:
             print('Creating cropped Movie')
-#                    segPath=output_folder + '\\' + expName + '_tail_segmented.avi'
-#                    tailSegMovOut = cv2.VideoWriter(segPath, cv2.VideoWriter_fourcc(*'DIVX'), FPS, (w,h))
             croppedSegPath=output_folder + '\\' + expName + '_tail_segmented_croppedInt.avi'
             croppedTailSegMovOut = cv2.VideoWriter(croppedSegPath, cv2.VideoWriter_fourcc(*'DIVX'), FPS, (cropSize[1],cropSize[0]))
+            croppedSegPath=output_folder + '\\' + expName + '_croppedInt.avi'
+            croppedMovOut = cv2.VideoWriter(croppedSegPath, cv2.VideoWriter_fourcc(*'DIVX'), FPS, (cropSize[1],cropSize[0]))
+            
         # Read next frame 
         ret, im = vid.read()
         errF=-1
-        
-        # check we haven't lost the fish (more than 10% of movie continuously)
-        # return error frame and break the loop
-#        if(noContoursCount>limitFrames):
-#            failedAviFiles=True
-#            errF=f-noContoursCount
-#            break
-        
+    
         # Convert to grayscale (uint8)
         current = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         crop, xOff, yOff = get_ROI_crop(current, ROI,0)
         background, xOff, yOff = get_ROI_crop(backgroundFull, ROI,0)                      
         diffimg= np.subtract(background,crop)                
         diffimg[diffimg>220] = 0  #remove nearly saturated differences; at edges of objects (not sure where these come from... water evaporation maybe?)
-            # 0.005 s
             
         # Determine current threshold
         # Because the edges are much lower in intensity, this can mess with the threshold if too much of the image is black
-        # therefore we only include values above 30 (lowest measured pixel value of navigable chamber at set IR intensity)
-        threshold_level = np.median(background[background>30])/7     
-        
+        # therefore we only include values above 70 (lowest measured pixel value of navigable chamber at set IR intensity)
+        threshold_level = np.median(background[background>70])/6   
+        tailThreshold = threshold_level*0.7
         # Threshold            
         level, threshold = cv2.threshold(diffimg,threshold_level,255,cv2.THRESH_BINARY)
         threshold = np.uint8(diffimg > threshold_level)
          
         # Binary Close
-        #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(12,12))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernelSize,kernelSize))
         closing = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, kernel)
             
         # Find Binary Contours            
         contours, hierarchy = cv2.findContours(closing,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-        # takes virtually no time
             
         # Create Binary Mask Image
         mask = np.zeros(crop.shape,np.uint8)
         
-        # If there are NO contours, then skip tracking
+        # If there are NO contours, then skip frame
         if len(contours) == 0:
             print('No Contour')
             noContoursCount+=1
@@ -194,7 +184,7 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
         else:
             noContoursCount=0   # Reset contour count if we found the fish again
             # Get Largest Contour (fish, ideally)
-            largest_cnt, area = get_largest_contour(contours,area_limit=3000)
+            largest_cnt, area = get_largest_contour(contours,area_limit=areaLimit)
             
             # If the particle to too small to consider, skip frame
             if area == 0.0 or area<0:
@@ -209,11 +199,12 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                     eY = eyS[f-1] - yOff
                     heading = ortS[f-1]
                     motion = -1.0
-                    for j in range(arcNum):
-                        nextX=fishSegX_allFramesT[-1]
-                        nextY=fishSegY_allFramesT[-1]   
-                        fishSegX_allFramesT.append(nextX)
-                        fishSegY_allFramesT.append(nextY)
+                    if trackTail:
+                        for j in range(arcNum):
+                            nextX=fishSegX_allFramesT[-1]
+                            nextY=fishSegY_allFramesT[-1]   
+                            fishSegX_allFramesT.append(nextX)
+                            fishSegY_allFramesT.append(nextY)
                 else:
                     area = -1.0
                     fX = xOff
@@ -224,9 +215,10 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                     eY = yOff
                     heading = -181.0
                     motion = -1.0
-                    for j in range(arcNum):
-                        fishSegX_allFramesT.append(-1)
-                        fishSegY_allFramesT.append(-1)
+                    if trackTail:
+                        for j in range(arcNum):
+                            fishSegX_allFramesT.append(-1)
+                            fishSegY_allFramesT.append(-1)
             else:
                 # Draw contours into Mask Image (1 for Fish, 0 for Background
                 cv2.drawContours(mask,[largest_cnt],0,1,-1) # -1 draw the contour filled
@@ -251,15 +243,15 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                 else:
                     motion = 0
                  
-                # ---------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
                 # Find Body and Eye Centroids
-                area = np.float(area)
+                area = float(area)
                 
                 # Highlight 80% of the birghtest pixels (body + eyes)                    
-                numBodyPixels = np.int(np.ceil(area*0.8))
+                numBodyPixels = int(np.ceil(area*0.8))
                     
                 # Highlight 10% of the birghtest pixels (mostly eyes)     
-                numEyePixels = np.int(np.ceil(area*0.1))
+                numEyePixels = int(np.ceil(area*0.1))
                     
                 # Fish Pixel Values (difference from background)
                 fishValues = diffimg[pixelpoints[:,0], pixelpoints[:,1]]
@@ -281,16 +273,16 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                 values = np.copy(all_values)
                 values = (values-threshold_level+1)
                 acc = np.sum(values)
-                fX = np.float(np.sum(c*values))/acc
-                fY = np.float(np.sum(r*values))/acc
+                fX = float(np.sum(c*values))/acc
+                fY = float(np.sum(r*values))/acc
                 
                 # Eye Centroid (a weighted centorid)
                 values = np.copy(all_values)                   
                 values = (values-eyeThreshold+1)
                 values[values < 0] = 0
                 acc = np.sum(values)
-                eX = np.float(np.sum(c*values))/acc
-                eY = np.float(np.sum(r*values))/acc
+                eX = float(np.sum(c*values))/acc
+                eY = float(np.sum(r*values))/acc
                 
                 # Body Centroid (a binary centroid, excluding "eye" pixels)
                 values = np.copy(all_values)                   
@@ -298,8 +290,8 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                 values[values >= bodyThreshold] = 1                                                            
                 values[values > eyeThreshold] = 0                                                            
                 acc = np.sum(values)
-                bX = np.float(np.sum(c*values))/acc
-                bY = np.float(np.sum(r*values))/acc
+                bX = float(np.sum(c*values))/acc
+                bY = float(np.sum(r*values))/acc
 #                sampleAngle=arcSam
 #                circleCoords=AZU.findCircleEdgeSubPix(xo=eY,yo=eX,r=18,sampleN=int(360/sampleAngle))
 #                circleValsY=[]
@@ -313,91 +305,86 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                     
                     # Now use this as the seed to find body contour (might be a better way to do this in cv2)
 #                    reg=findBodyFromSeed(60,diff,seed)
-                # ---------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------         
                 # Heading (0 deg to right, 90 deg up)
                 heading = math.atan2((bY-eY), (eX-bX)) * (360.0/(2*np.pi))
-                    
-                # Find tail in segments starting at the body and using the heading
-                flag=True
-                arcHeading=heading
-#                prevsX=bX
-#                prevsY=bY
-#                tailLength=0
-#                arcRadt=arcRad
-#                print('finding end of tail...')
-#                while flag:
-##                    print('flag'+str(flag))
-##                    print('arcHeading'+str(arcHeading))
-#                    arcVals,arcY,arcX=AZU.findArc(prevsX,prevsY,arcHeading,diffimg,arcLen=120,arcRad=arcRadt,arcSam=arcSam)
-#                    [h,w]=diffimg.shape
-#                    arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,5)
-##                    print(str(np.max(arcVals_sm)))
-#                    if np.max(arcVals_sm)<tailThreshold: # if arbitrary threshold not reached, then we've lost the tail. Typical diffimg values that are not fish are 0-3
-#                        flag=False
-#                        attCount=0
-#                        while np.max(arcVals_sm)<tailThreshold and arcRadt>5:
-#                            print('attempt no...' + str(attCount))
-#                            attCount+=1
-#                        # if we lose the tail, shrink the segment until you find the tip (or the segment gets too small)
-#                            arcRadt-=1
-#                            arcVals,arcX,arcY=AZU.findArc(prevsX-yOff,prevsY-yOff,arcHeading,diffimg,arcRad=arcRadt)
-#                            arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,5)
-#                            
-#                    
-#                    tailLength+=arcRadt
-#                    
-#                    # find new point (subPixel peak in arc profile)
-#                    nextSegsX=arcX[np.argmax(arcVals_sm)]+xOff
-#                    nextSegsY=arcY[np.argmax(arcVals_sm)]+yOff
-#                    
-#                    # update angle between the new point and the previous point to feed back into the loop (note it is reversed as the heading between body and eye is reversed in findArc)
-#                    arcHeading=math.atan2((nextSegsY-prevsY), (prevsX-nextSegsX)) * (360.0/(2*np.pi))
-##                    print('prevX='+str(prevsX))
-#                    prevsX=nextSegsX
-#                    prevsY=nextSegsY
-#                # Once tail length has been found, divide this by the desired number of segments to get optimum arc radius (should be close to 10 pixels)
-#                arcRad=np.int(np.floor(np.divide(tailLength,arcNum)))
-#                print('done with end of tail...')
-                
-                # repeat arcs to find segment coordinates with optimised radius 
-                # make copy of current, add markers for segment coordinates (and arcs)
-                prevX=bX
-                prevY=bY
-                
-                currentMarkers=np.copy(current)
-                currentMarkers = cv2.cvtColor(currentMarkers, cv2.COLOR_GRAY2BGR)
-                currentMarkers=cv2.drawMarker(currentMarkers, (np.int(bX+xOff), np.int(bY+yOff)), (0,255,255), cv2.MARKER_CROSS, 7, thickness=1, line_type=8)
-#                if display:
-#                    cv2.namedWindow("Display",cv2.WINDOW_AUTOSIZE )
-                
-#                print('finding segments...')
-                for j in range(arcNum):
-                    arcVals,arcX,arcY=AZU.findArc(prevY,prevX,arcHeading,diffimg,arcRad=arcRad)
-                    arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,5)
-                    nextX=(arcX[np.argmax(arcVals_sm)])
-                    nextY=(arcY[np.argmax(arcVals_sm)])
-                    arcHeading=math.atan2((nextY-prevY), (prevX-nextX)) * (360.0/(2*np.pi))
-#                    print('arcHeading='+str(arcHeading))
-                    fishSegX_allFramesT.append(nextX + xOff)
-                    fishSegY_allFramesT.append(nextY + yOff)
 
-                    cv2.drawMarker(currentMarkers, (np.int(nextX+xOff), np.int(nextY+yOff)), (0,0,255), cv2.MARKER_DIAMOND, 3, thickness=1, line_type=8)
-                    for i in range(len(arcX)):
-                        currentMarkers=cv2.drawMarker(currentMarkers, (np.int(arcX[i]+xOff), np.int(arcY[i]+yOff)), (0,255,0), cv2.MARKER_SQUARE, 1, thickness=1, line_type=8)
-                    prevX=nextX
-                    prevY=nextY
-#                    tailSegMovOut.write(currentMarkers)
+# -------------Tail Tracking ---------------------------------------------------------------------------
+                if trackTail:
+                    # Find tail in segments starting at the body and using the heading
+                    if f==0:
+                        arcHeading=heading
+                        prevsX=bX
+                        prevsY=bY
+                        tailLength=0
+                        arcRadt=arcRad
+                        print('finding end of tail...')
+                        flag=True
+                        while flag and f==0: # find length of tail if on first frame
+                            arcVals,arcX,arcY=AZU.findArc(prevsY,prevsX,arcHeading,diffimg,arcLen=120,arcRad=arcRadt*0.5,arcSam=arcSam)
+                            [h,w]=diffimg.shape
+                            arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,gauss_filt)
+                            # could then fit a gaussian but probably unneccessary
+                            while np.max(arcVals_sm)<tailThreshold and arcRadt>=0:
+                                # if we lose the tail, shrink the segment until you find the tip (or the segment gets too small)
+                                arcRadt-=1
+                                arcVals,arcX,arcY=AZU.findArc(prevsY,prevsX,arcHeading,diffimg,arcRad=arcRadt)
+                                arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,5)
+                                flag=False
+                            tailLength+=arcRadt
+                            
+                            # find new point (subPixel peak in arc profile)
+                            nextSegsX=arcX[np.argmax(arcVals_sm)]+xOff
+                            nextSegsY=arcY[np.argmax(arcVals_sm)]+yOff
+                      
+                            # update angle between the new point and the previous point to feed back into the loop (note it is reversed as the heading between body and eye is reversed in findArc)
+                            arcHeading=math.atan2((nextSegsY-prevsY), (prevsX-nextSegsX)) * (360.0/(2*np.pi))
+                            prevsX=nextSegsX
+                            prevsY=nextSegsY
+                        # Once tail length has been found, divide this by the desired number of segments to get optimum arc radius (should be close to 10 pixels)
+                        arcRad=int(np.floor(np.divide(tailLength,arcNum)))
+                        print('found end of tail...tailLength=' + str(tailLength))
+                    # print('out of while loop')
+                    # repeat arcs to find segment coordinates with optimised radius 
+                    # make copy of current, add markers for segment coordinates (and arcs)
+                    prevX=bX
+                    prevY=bY
+                    arcHeading=heading
+                    currentMarkers=np.copy(current)
+                    currentMarkers = cv2.cvtColor(currentMarkers, cv2.COLOR_GRAY2BGR)
+                    currentMarkers=cv2.drawMarker(currentMarkers, (int(bX+xOff), int(bY+yOff)), (0,255,255), cv2.MARKER_CROSS, 7, thickness=1, line_type=8)
+                    if display:
+                        cv2.namedWindow("Display",cv2.WINDOW_AUTOSIZE )
+                    
+                    # print('finding segments...')
+                    for j in range(arcNum):
+                        arcVals,arcX,arcY=AZU.findArc(prevY,prevX,arcHeading,diffimg,arcRad=arcRad)
+                        arcVals_sm=scipy.ndimage.gaussian_filter1d(arcVals,gauss_filt)
+                        nextX=(arcX[np.argmax(arcVals_sm)])
+                        nextY=(arcY[np.argmax(arcVals_sm)])
+                        arcHeading=math.atan2((nextY-prevY), (prevX-nextX)) * (360.0/(2*np.pi))                     
+                        fishSegX_allFramesT.append(nextX + xOff)
+                        fishSegY_allFramesT.append(nextY + yOff)
+    
+                        cv2.drawMarker(currentMarkers, (int(nextX+xOff), int(nextY+yOff)), (0,0,255), cv2.MARKER_DIAMOND, 3, thickness=1, line_type=8)
+                        for i in range(len(arcX)):
+                            currentMarkers=cv2.drawMarker(currentMarkers, (int(arcX[i]+xOff), int(arcY[i]+yOff)), (0,255,0), cv2.MARKER_SQUARE, 1, thickness=1, line_type=8)
+                        prevX=nextX
+                        prevY=nextY
                     
                 
-                    # resize so it doesn't take up whole screen
+                # resize so it doesn't take up whole screen
                 _,startIdX,startIdY,endIdX,endIdY=cropImFromTracking(vid,current,fX + xOff,fY + yOff,cropSize)
                 resFull=currentMarkers[startIdY:endIdY,startIdX:endIdX]
+                resFullNoMarker=current[startIdY:endIdY,startIdX:endIdX]
 #                if display:
 #                    res=cv2.resize(resFull, (0, 0), fx=2, fy=2) 
 #                    cv2.imshow("Display", res)
-                if f>0:
+                if f>0 and saveCroppedMovie:
 #                    tailSegMovOut.write(currentMarkers)
                     croppedTailSegMovOut.write(resFull)
+                    croppedMovOut.write(resFullNoMarker)
                 # Now crop the movie around the fish
                 # crop movie here and recompute diffimg if working with the first frame
                 # find start and end positions for cropping around the located fish
@@ -417,8 +404,6 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
         # ---------------------------------------------------------------------------------
         # Store data in arrays
         # Shift X,Y Values by ROI offset and store in Matrix
-        
-        
         fxS[f,0] = fX + xOff
         fyS[f,0] = fY + yOff
         bxS[f,0] = bX + xOff
@@ -456,37 +441,19 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
             vid.set(cv2.CAP_PROP_POS_FRAMES,f+startFrame) # reset frame number
             print('continuing tracking')            
             
-#        updated_background = (np.float32(crop) * 0.01) + (current_background * 0.99)
-        # 0.02s every frame
-        # ---------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
         # Plot Fish in Movie with Tracking Overlay?
         if plot:
-#            if(f==0) or (f == numFrames-1):
             if (f%600==0): # every 5 seconds
-#                print(f)
                 plt.clf()
                 enhanced = cv2.multiply(current, 1)
                 color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
                 plt.imshow(color)
                 plt.axis('image')
-                plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
-                plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
-                plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
-#                if(l<10):
-#                    ll='00'+str(l)
-#                else:
-#                    if(l<100):
-#                        ll='0'+str(l)
-#                    else:
-#                        ll=str(l)
-#                        
-#                plt.savefig(output_folder + '\\' + ll + '.png', dpi=300)
-#                l+=1
-#                if (f % 7200 == 0): # every minute
-#                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
-#                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
-#                    plt.draw()
-#                    plt.pause(0.001)
+                plt.plot(fxS[:,0],fyS[:,0],'b.', markersize = 1)
+                plt.plot(exS[:,0],eyS[:,0],'r.', markersize = 1)
+                plt.plot(bxS[:,0],byS[:,0],'co', markersize = 1)
+
         else:  
             if (f == 0) or (f == numFrames-1): # only plot this in the first and last frame to save the file
                 
@@ -495,40 +462,29 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
                 color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
                 plt.imshow(color)
                 plt.axis('image')
-                plt.plot(fxS[:,0],fyS[:,0],'b.', MarkerSize = 1)
-                plt.plot(exS[:,0],eyS[:,0],'r.', MarkerSize = 1)
-                plt.plot(bxS[:,0],byS[:,0],'co', MarkerSize = 1)
-#                if (f % 1000 == 0):
-#                    plt.text(bxS[f,0]+10,byS[f,0]+10,  '{0:.1f}'.format(ortS[f,0]), color = [1.0, 1.0, 0.0, 0.5])
-#                    plt.text(bxS[f,0]+10,byS[f,0]+30,  '{0:.0f}'.format(areaS[f,0]), color = [1.0, 0.5, 0.0, 0.5])
-#                    plt.draw()
-#                    plt.pause(0.001)
-#                    
+                plt.plot(fxS[:,0],fyS[:,0],'b.', markersize = 1)
+                plt.plot(exS[:,0],eyS[:,0],'r.', markersize = 1)
+                plt.plot(bxS[:,0],byS[:,0],'co', markersize = 1)
+
 # ---------------------------------------------------------------------------------
 # Save Tracking Summary
         if(f == 0):
-#            print('Making tracking image')
             path=output_folder + '\\' + expName + '_initial_tracking.png'
             plt.savefig(path, dpi=300)
-#            AZU.createShortcutTele(path)
             
             plt.figure('backgrounds')
             plt.imshow(backgroundFull)
             path=output_folder+'\\' + expName +'_initial_background.png'
             plt.savefig(path, dpi=300)
-#            AZU.createShortcutTele(path)
             plt.close('backgrounds')
        
         if(f == numFrames-1):
             path=output_folder+'\\' + expName +'_final_tracking.png'
             plt.savefig(path, dpi=300)
-#            AZU.createShortcutTele(path)
-            
             plt.figure('backgrounds')
             plt.imshow(backgroundFull)
             path=output_folder+'\\' + expName +'_final_background.png'
             plt.savefig(path, dpi=300)
-#            AZU.createShortcutTele(path)
             plt.close('backgrounds')
             
         if(f==math.floor(numFrames/2)):
@@ -538,25 +494,13 @@ def arena_fish_tracking(aviFile, output_folder, ROI,plot=True,cropOp=1,FPS=120,s
         # Convert list into array and reshape it ('break it down')
     x_seg_data=np.asarray(fishSegX_allFramesT).reshape((numFrames,arcNum))
     y_seg_data=np.asarray(fishSegY_allFramesT).reshape((numFrames,arcNum))
-    
-#     Save cropped movie?     
-#    if(saveCroppedMovie==1):
-#        saveName=output_folder+'\\' + expName +'_cropped.avi'
-#         crop movie from fx
-#        saveGrayImgListAsMovie(croppedMovie,saveName,FPS,cropSize)
-#    
-#    if(saveCroppedMovie==1):
-#        saveName=output_folder+'\\' + expName +'_cropped.avi'
-#        makeCroppedMovieFromTracking(fxS,fyS,vid,saveName,FPS,cropSize)
-#        TailVid=cv2.VideoCapture(segPath)
-#        saveName=output_folder + '\\' + expName + '_tail_segmented_cropped.avi'
-#        makeCroppedMovieFromTracking(fxS,fyS,TailVid,saveName,FPS,cropSize)
-#        
+            
 # -------------------------------------------------------------------------
 # Close Video Files
-    croppedTailSegMovOut.release()
+    if saveCroppedMovie:
+        croppedMovOut.release()
+        croppedTailSegMovOut.release()
     vid.release()
-#    tailVid.release()
     print('Finished tracking')
    
     # Return tracking data
@@ -712,12 +656,12 @@ def saveGrayImgListAsMovie(list,saveName,FPS,size): # convenient and very fast b
 ##############################################################################
 # Return ROI size from ROI list
 def get_ROI_size(ROIs, numROi):
-    width = np.int(ROIs[numROi, 2])
-    height = np.int(ROIs[numROi, 3])
+    width = int(ROIs[numROi, 2])
+    height = int(ROIs[numROi, 3])
     
     return width, height
 
-def  recomputeBackground(vid,f,ROI,FPS):
+def recomputeBackground(vid,f,ROI,FPS):
     
     print('Updating background (' + str((f/FPS)/60) + ' mins done)')
     # Allocate space for ROI background
@@ -790,7 +734,7 @@ def compute_initial_background(vid, ROI,startFrame=0):
     # Find initial background for the ROI
     crop_width, crop_height = get_ROI_size(ROI, 0)
     bFrames = 100
-    #stepFrames = np.int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
+    #stepFrames = int(np.floor_divide(np.floor(numFrames*0.05),bFrames)) # Check background frame uniformly across time series for [numSteps] frames
     stepFrames = 2400 # Check background frame every 20 seconds
     
     backgroundStack = np.zeros((crop_height, crop_width, bFrames), dtype = np.float32)  
@@ -839,10 +783,10 @@ def compute_initial_background(vid, ROI,startFrame=0):
     return background_ROI
 
 def get_ROI_crop(image, ROIs, numROi):
-    r1 = np.int(ROIs[numROi, 1])
-    r2 = np.int(r1+ROIs[numROi, 3])
-    c1 = np.int(ROIs[numROi, 0])
-    c2 = np.int(c1+ROIs[numROi, 2])
+    r1 = int(ROIs[numROi, 1])
+    r2 = int(r1+ROIs[numROi, 3])
+    c1 = int(ROIs[numROi, 0])
+    c2 = int(c1+ROIs[numROi, 2])
     crop = image[r1:r2, c1:c2]
     
     return crop, c1, r1
@@ -885,8 +829,8 @@ def getSubPixelIntensity(a,image): # only works one pixel radius... consider con
     
     [x,y]=a
     # round coordinates to find root pixel
-    xR=np.int(np.round(x))
-    yR=np.int(np.round(y))
+    xR=int(np.round(x))
+    yR=int(np.round(y))
     
     # mod to 1 (how much closer to the adjacent pixel am I?)
     remX=np.mod(x,1)

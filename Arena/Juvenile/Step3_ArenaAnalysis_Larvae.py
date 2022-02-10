@@ -19,17 +19,16 @@ import numpy as np
 import datetime
 import glob
 import matplotlib.pyplot as plt
-import datetime
-import scipy.stats as stats
 # Import local modules
 import AZ_utilities as AZU
 import AZ_compare as AZC
 import AZ_streakProb as AZP
 
 FPS = 120
-folderListFile_Ctrl='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Sham.txt'
-folderListFile_Cond='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Lesion.txt'
-FigureFolder='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/NewFigures'#
+# folderListFile_Ctrl='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Sham.txt'
+# folderListFile_Cond='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/Lesion.txt'
+# FigureFolder= 'S:/WIBR_Dreosti_Lab/Tom/DataForAdam/GroupedTracking/NewFigures_EC_M0vsEA_M0'
+FigureFolder= 'D:/NewFigures_EC_B0vsEA_B0'
 AZU.cycleMkDir(FigureFolder)
 labels=['Control','Lesion']
 compName=labels[0]+'_vs_'+labels[1]
@@ -46,44 +45,12 @@ ef=-1
 # createGroupFigures=True
 # keepGroupFigures=False
 # omitForward=False
-
-def getFiles(folderNames):
-    trackingFiles,tailXFiles,tailYFiles,tailFiles,boutFiles,bodyThetaFiles=[],[],[],[],[],[]
-    for folder in folderNames:
-        trackingFolder=folder + r'\\Tracking\\'
-        # Grab tracking files from folder or .txt folder list file
-        trackingFilest=glob.glob(trackingFolder+'*tracking.npz')
-        tailXFilest=glob.glob(trackingFolder+'*SegX.csv')
-        tailYFilest=glob.glob(trackingFolder+'*SegY.csv')
-        boutFilest=glob.glob(trackingFolder+'Analysis\*bouts*')
-        tailFilest=glob.glob(trackingFolder+'Analysis\*tailAnalysis*')
-        bodyThetaFilest=glob.glob(trackingFolder+'Analysis\*bodyTheta*')
-        for i,s in enumerate(trackingFilest): #
-            trackingFiles.append(s)
-            tailXFiles.append(tailXFilest[i])
-            tailYFiles.append(tailYFilest[i])
-            boutFiles.append(boutFilest[i])
-            tailFiles.append(tailFilest[i])
-            bodyThetaFiles.append(bodyThetaFilest[i])
-    return trackingFiles,tailXFiles,tailYFiles,tailFiles,boutFiles,bodyThetaFiles
-
-_,folderNames = AZU.read_folder_list(folderListFile_Ctrl)
-_,folderNames1 = AZU.read_folder_list(folderListFile_Cond)
-trackingFiles,tailXFiles,tailYFiles,tailFiles,boutFiles,bodyThetaFiles=getFiles(folderNames)
-trackingFiles1,tailXFiles1,tailYFiles1,tailFiles1,boutFiles1,bodyThetaFiles1=getFiles(folderNames1)
-
-# Excise bouts tail angle
-# Bout PCA
-# groupsTheta = [bodyThetaFiles,bodyThetaFiles1]
-# groupsBouts = [boutFiles,boutFiles1]
-# prewindow=100 # miliseconds around the peak or start to take as 'bout'
-# postwindow=400 # miliseconds around the peak or start to take as 'bout'
-# for i,groupTheta in enuemrate(groupsTheta):
-#     groupBouts=groupsBouts[i]
-#     for k,thisBodyTheta in enumerate(group):
-#         thisBoutsStarts=groupBouts[k][:,1]
-#         for thisBoutStart in thisBoutsStarts:
-
+# trackingFolders=['S:\WIBR_Dreosti_Lab\Tom\DataForAdam\GroupedTracking\EC_B0','S:\WIBR_Dreosti_Lab\Tom\DataForAdam\GroupedTracking\EA_B0']
+trackingFolders=['S:\WIBR_Dreosti_Lab\Tom\DataForAdam\GroupedTracking\EC_B0','S:\WIBR_Dreosti_Lab\Tom\DataForAdam\GroupedTracking\EA_B0']
+trackingFiles=glob.glob(trackingFolders[0]+'*\*tracking*.npz')
+boutFiles=glob.glob(trackingFolders[0]+'*\Analysis*\*bouts*.npy')
+trackingFiles1=glob.glob(trackingFolders[1]+'*\*tracking*.npz')
+boutFiles1=glob.glob(trackingFolders[1]+'*\Analysis*\*bouts*.npy')
 # cumulative distance
 cumDistS,distPerSecS=[],[]
 cumDistS1,distPerSecS1=[],[]
@@ -129,6 +96,9 @@ for i,trace in enumerate(cumDistS):
 summ=np.sum(sumS,axis=0)
 cumDist=np.divide(summ,numKept)
 plt.plot(cumDist,color='black',linewidth=4)
+plt.xticks(ticks=[0,5*120*60,10*120*60,15*120*60,20*120*60],labels=[0,5,10,15,20])
+plt.xlim(0,20*120*60)
+plt.ylim(0,80)
 plt.ylabel('Distance (cm)')
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 plt.savefig(savePath,dpi=600)
@@ -156,6 +126,9 @@ for i,trace in enumerate(cumDistS1):
 summ1=np.sum(sumS1,axis=0)
 cumDist1=np.divide(summ1,numKept)
 plt.plot(cumDist1,color='black',linewidth=4)
+plt.xticks(ticks=[0,5*120*60,10*120*60,15*120*60,20*120*60],labels=[0,5,10,15,20])
+plt.xlim(0,20*120*60)
+plt.ylim(0,80)
 plt.ylabel('Distance (cm)')
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 plt.savefig(savePath,dpi=600)
@@ -171,6 +144,8 @@ for trace in sumS1:
 plt.plot(cumDist1,color='r',linewidth=3,alpha=0.9,label=labels[1])
 plt.xlabel('Time (s)')
 plt.xticks(ticks=[0,5*120*60,10*120*60,15*120*60,20*120*60],labels=[0,5,10,15,20])
+plt.xlim(0,20*120*60)
+plt.ylim(0,80)
 plt.ylabel('Distance (cm)')
 plt.legend()
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
@@ -213,12 +188,6 @@ hist_streaks_true_controls = np.cumsum(np.histogram(all_streaks_true_controls, b
 hist_streaks_random_controls = np.cumsum(np.histogram(all_streaks_random_controls, bins = np.arange(-0.5, 16, 1), density=1)[0])
 hist_streaks_true_lesions = np.cumsum(np.histogram(all_streaks_true_lesions, bins = np.arange(-0.5, 16, 1), density=1)[0])
 hist_streaks_random_lesions = np.cumsum(np.histogram(all_streaks_random_lesions, bins = np.arange(-0.5, 16, 1), density=1)[0])
-
-tCtrl,pvalueCtrl=stats.ttest_ind(all_streaks_true_controls, all_streaks_random_controls, axis=0, equal_var=False)
-tLesion,pvalueLesion=stats.ttest_ind(all_streaks_true_lesions, all_streaks_random_lesions, axis=0, equal_var=False)
-
-chiSq_ctrl=stats.chisquare(f_obs=all_streaks_true_controls, f_exp=all_streaks_random_controls)
-chiSq_les=stats.chisquare(f_obs=all_streaks_true_lesions, f_exp=all_streaks_random_lesions)
 
 figname='Streak probability ' + labels[1]
 figname='Streak probability'
@@ -279,7 +248,7 @@ plt.scatter(angle,disp,s=2,alpha=0.2)
 plt.xlabel(xlabel)
 plt.ylabel(ylabel)
 plt.xlim(-100,100)
-plt.ylim(0,20)
+plt.ylim(0,10)
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 plt.savefig(savePath,dpi=600)
 
@@ -297,8 +266,8 @@ figname='BPS'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 ylabel='Bouts per second'
 xlabel='GroupName'
-yint=[0.5,1.0,1.5,2]
-ylim=[0,3]
+yint=[0.5,1.0,1.5]
+ylim=[0,1.5]
 AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
 
 # Durations
@@ -345,8 +314,8 @@ figname='Displacement'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 ylabel='Bout Displacement (mm)'
 xlabel='GroupName'
-yint=[0,5,10]
-ylim=[0,10]
+yint=[0,2.5,5]
+ylim=[0,5]
 AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
 
 # mean IBI and std
@@ -370,8 +339,8 @@ figname='IBI'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'
 ylabel='Interbout interval (s)'
 xlabel='GroupName'
-yint=[0,1,2,3,4]
-ylim=[0,4.5]
+yint=[0,1,2,3,4,5,6]
+ylim=[0,6]
 AZC.compPlot(ctrl,cond,labels,figname,savePath,yint,ylabel,ylim,save=save)
 figname='IBI Variance'
 savePath=FigureFolder+'\\'+figname+'_'+compName+'_'+dateSuff+'.png'

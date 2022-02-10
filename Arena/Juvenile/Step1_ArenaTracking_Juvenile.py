@@ -26,35 +26,40 @@ import datetime
 import pandas as pd
 import os
 
-stim=False
+
 #folderListDir='D:\\'
 #folderListFile ='S:/WIBR_Dreosti_Lab/Tom/JuvenileFreeSwimming/2109xx.txt'
 #folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/LesionTest.txt'
 #folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/LesionNew.txt'
-folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/B0/ShamNew.txt'
+#folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/M0/Sham.txt'
+# folderListFile='S:/WIBR_Dreosti_Lab/Tom/Data/JuvenileFreeSwimming/M0/Lesion.txt'
+folderListFolder='S:/WIBR_Dreosti_Lab/Tom/Data/LarvaeFreeSwimming_NEW/'
+folderListFile=folderListFolder+'EA_M0_LarvaeFreeSwimming.txt'
 #folderListFile='D:/Wyart/MoviesToTrack/WyartCollabTest.txt'
 #folderListFile=folderListDir+folderListFile
+stim=False
 plot = True   # set  to true if you want to see the tracking as it happens... this slows the code significantly
 FPS = 120
 saveCroppedMovie=True
-cropSize=[256,256]
+larvae=True
 # folder list MUST BE IN THE FOLLOWING FORMAT:
 
 #D:\Arena\191024\
 #Blank\
 #Dots&Grating\
-
 dateSuff=(datetime.date.today()).strftime("%y%m%d")
-AnalysisFolder=r'D:\\Analysis'
-AZU.cycleMkDir(AnalysisFolder)
-sepTrackingPath=AnalysisFolder + r"\\TrackingData\\" + dateSuff
-sepTemplatePath=AnalysisFolder + r"\\Templates\\" + dateSuff + r"\\"
-if stim:
-    sepStimPath=AnalysisFolder + r"StimFiles/" + dateSuff + r"\\"
-    AZU.cycleMkDir(sepStimPath)
-ROI_path, folderNames = AZU.read_folder_list(folderListFile)
+#AnalysisFolder=r'D:\\Analysis'
+#AZU.cycleMkDir(AnalysisFolder)
+#sepTrackingPath=AnalysisFolder + r"\\TrackingData\\" + dateSuff + r"\\"
+#sepTemplatePath=AnalysisFolder + r"\\Templates\\" + dateSuff  + r"\\"
+sepTrackingPath='S:\WIBR_Dreosti_Lab\Tom\Data\LarvaeFreeSwimming_NEW\TrackingData\M0\Lesion'
+sepTemplatePath='S:\WIBR_Dreosti_Lab\Tom\Data\LarvaeFreeSwimming_NEW\Templates\M0\Lesion'
 AZU.cycleMkDir(sepTrackingPath)
 AZU.cycleMkDir(sepTemplatePath)
+#if stim:
+#    sepStimPath=AnalysisFolder + r"StimFiles/" + dateSuff + r"\\"
+#    AZU.cycleMkDir(sepStimPath)
+ROI_path, folderNames = AZU.read_folder_list(folderListFile)
 # grab bonsai files in the ROI_path 
 bonsaiFiles = glob.glob(ROI_path + '/*ROI*.bonsai')
 if(len(bonsaiFiles)!=0):
@@ -117,19 +122,15 @@ for idx,folder in enumerate(folderNames):
         numFrames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
         ## grab 5th frame to use as a template for the ROIs
         temp=AZU.grabFrame(aviFile,5)
-#        saveName=templateDirPath+expName + '_template.avi'
         saveSepName=sepTemplatePath+expName + '_template.avi'
-#        out = cv2.VideoWriter(saveName,cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
         outSep = cv2.VideoWriter(saveSepName,cv2.VideoWriter_fourcc(*'DIVX'), FPS, (width,height), False)
-#        out.write(temp)
         outSep.write(temp)
-#        out.release()
         outSep.release()
         
         
         if(f==0):
-            figureDirPath=d+r'\Figures'
-            trackingDirPath=d+r'\Tracking'
+            figureDirPath=d+r'\Figures'+dateSuff
+            trackingDirPath=d+r'\Tracking'+dateSuff
             
             AZU.tryMkDir(figureDirPath)
             AZU.tryMkDir(trackingDirPath)
@@ -141,7 +142,7 @@ for idx,folder in enumerate(folderNames):
         err=False
         try:
             
-            fxS, fyS, bxS, byS, exS, eyS, tailSegXS,tailSegYS,areaS, ortS, motS,failedAviFiles, errF = AZVJ.arena_fish_tracking(aviFile, figureDirPath, ROIs, cropSize=cropSize,plot=1, cropOp=1, FPS=FPS)
+            fxS, fyS, bxS, byS, exS, eyS, tailSegXS,tailSegYS,areaS, ortS, motS,failedAviFiles, errF = AZVJ.arena_fish_tracking(aviFile, figureDirPath, ROIs,plot=1, cropOp=1, FPS=FPS,larvae=larvae)
 #            finalTailAngle,cumulAngles,curvatures,tailmotion=AZVJ.computeTailCurvatures(tailSegXS,tailSegYS)
         except:
 #            print(str(f))
@@ -150,7 +151,9 @@ for idx,folder in enumerate(folderNames):
         if err==False:
             pd.DataFrame(tailSegXS).to_csv(trackingDirPath + '\\' + expName + '_TailSegX.csv', header=None, index=None)
             pd.DataFrame(tailSegYS).to_csv(trackingDirPath + '\\' + expName + '_TailSegY.csv', header=None, index=None)
-                        
+            
+            pd.DataFrame(tailSegXS).to_csv(sepTrackingPath + '\\' + expName + '_TailSegX.csv', header=None, index=None)
+            pd.DataFrame(tailSegYS).to_csv(sepTrackingPath + '\\' + expName + '_TailSegY.csv', header=None, index=None)
 #            if saveCroppedMovie:
 #                vid=cv2.VideoCapture(aviFile)
 #                saveName=folder+'\\' + expName +'_cropped.avi'
@@ -186,7 +189,7 @@ for idx,folder in enumerate(folderNames):
             print('Saving tracking at ' + filename)
             np.savez(filename, tracking=fish.T)
             # and in seperate tracking folder
-            trackname=sepTrackingPath+ expName + '_tracking.npz'
+            trackname=sepTrackingPath+ '\\'+ expName + '_tracking.npz'
             print('Saving tracking at ' + trackname)
             np.savez(trackname, tracking=fish.T)
     #        AZU.createShortcutTele(filename)
