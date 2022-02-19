@@ -6,11 +6,11 @@ Created on Sun Nov 03 09:21:29 2019
 """
 # -----------------------------------------------------------------------------
 
-lib_path = r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
+# lib_path = r'C:\Users\thoma\OneDrive\Documents\GitHub\Arena_Zebrafish\libs'
 import math
 # Set Library Paths
-import sys
-sys.path.append(lib_path)
+# import sys
+# sys.path.append(lib_path)
 # -----------------------------------------------------------------------------
 
 # Import useful libraries
@@ -389,7 +389,7 @@ def collectIndFishDatafromGroupDict(groupDic,measure=''):
     
 ## File structure and info functions ##########################################
 
-def tryMkDir(path,report=0):
+def tryMkDir(path,report=False):
 ## Creates a new folder at the given path
 ## returns -1 and prints a warning if fails
 ## returns 1 if passed
